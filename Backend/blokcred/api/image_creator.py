@@ -19,7 +19,7 @@ def create_image(myname):
     myFont = ImageFont.truetype('arial.ttf', 65)
     
     # Add Text to an image
-    I1.text((400, 450), myname, font=myFont, fill=(255, 0, 0))
+    I1.text((400, 450), myname, font=myFont, fill=(0, 0, 0))
     
     # Display edited image
     img.show()
