@@ -10,6 +10,7 @@ from . import contract_config
 from django.conf import settings
 
 from .image_creator import create_image
+from .generateCredentials import generatePassword
 
 ipfs_client = ipfsApi.Client("127.0.0.1", 5001)
 metadata_template = {
@@ -141,3 +142,10 @@ def create_metadata(name, description, file):
     metadataURL = "http://ipfs.io/ipfs/" + metadata_hash[0]["Hash"]
     print(metadataURL)
     return metadataURL
+
+@api_view(["GET"])
+def create_credentials(request):
+    password = generatePassword()
+    print(password)
+    return Response({"status": "Success"})
+    
