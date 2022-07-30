@@ -4,7 +4,7 @@ from rest_framework.decorators import api_view
 import requests
 import ipfsApi
 from .image_creator import create_image
-from .generateCredentials import generatePassword
+# from .generateCredentials import generatePassword
 from .contractcalls import create_certificate, deploy_contract, create_souvenir
 from .models import nft, admin, issuer, destination, kpi
 from .serializers import nft_serializer
