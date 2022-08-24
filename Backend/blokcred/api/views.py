@@ -6,13 +6,13 @@ import ipfsApi
 from .image_creator import create_image
 # from .generateCredentials import generatePassword
 from .contractcalls import create_certificate, deploy_contract, create_souvenir
-from .models import nft, admin, issuer, destination, kpi
+from .models import nft, admin, issuer, destination, kpi, individual
 from .serializers import nft_serializer
 from django.forms.models import model_to_dict
 from .souvenir_creator import add_souvenir_frame
 from django.http import HttpResponse
 import os
-
+from .eocerts import issuecertificates
 
 
 # Add admin
@@ -54,9 +54,9 @@ def check_admin(request):
 
 
 @api_view(["GET"])
-def get_certs(request):    
+def get_certs(request):
     if kpi.objects.filter(id=1).exists():
-        kpi_model = kpi.objects.filter(id=1).first()        
+        kpi_model = kpi.objects.filter(id=1).first()
     else:
         kpi.objects.create(id=1, total_certificates=0)
         kpi_model = kpi.objects.filter(id=1).first()
@@ -103,6 +103,8 @@ def check_issuer(request):
     return Response({"status": "Failed"})
 
 # Get issuer details
+
+
 @api_view(["POST"])
 def get_issuer(request):
     account = request.data["address"]
@@ -135,8 +137,8 @@ def add_destination(request):
             existing_destination.added_by = added_by
             existing_destination.frame = frame
             existing_destination.save()
-        else:          
-            contract_address = deploy_contract(name)            
+        else:
+            contract_address = deploy_contract(name)
             destination.objects.create(
                 name=name,
                 description=description,
@@ -173,11 +175,12 @@ def souvenir_upload(request):
     metadataURL = request.data['metadata']
     imageURL = request.data['image']
     added_by = request.data['addedBy']
-    this_destination = destination.objects.filter(account = added_by).first()
+    this_destination = destination.objects.filter(account=added_by).first()
     contract_address = this_destination.contract_address
     if nft.objects.filter(metadata_url=metadataURL).exists():
         return Response({"status": "Already exists"})
-    (token_id, tx_hash) = create_souvenir(account, metadataURL, contract_address=contract_address)
+    (token_id, tx_hash) = create_souvenir(
+        account, metadataURL, contract_address=contract_address)
     response_object = {
         "status": "Success",
         "tokenId": token_id,
@@ -198,18 +201,31 @@ def souvenir_upload(request):
     this_destination.total_certificates = this_destination.total_certificates + 1
     this_destination.save()
     return Response(response_object)
+
+
 @api_view(["POST"])
-def create_souvenir_image(request):    
+def create_souvenir_image(request):
     image = request.data['image']
-    frame_url = request.data['frame_url']    
-    souvenir_path = add_souvenir_frame(image, frame_url)        
+    frame_url = request.data['frame_url']
+    souvenir_path = add_souvenir_frame(image, frame_url)
     with open(souvenir_path, "rb") as file:
         souvenir = file
-        response =  HttpResponse(souvenir.read(), content_type="image/png")
+        response = HttpResponse(souvenir.read(), content_type="image/png")
     os.remove(souvenir_path)
     return response
-    
 
+
+# Get individual details
+@api_view(["POST"])
+def get_individual(request):
+    account = request.data["account"]
+    if individual.objects.filter(account=account).exists():
+        this_individual = individual.objects.filter(account=account).first()
+    else:
+        this_individual = individual.objects.create(
+            account=account, storage_used=0, storage_limit=5120)
+    this_individual_dict = model_to_dict(this_individual)
+    return Response({"status": "Success", "credentials": this_individual_dict})
 
 
 # Individual file upload to NFT
@@ -221,8 +237,23 @@ def file_upload(request):
     description = request.data["description"]
     metadataURL = request.data['metadata']
     imageURL = request.data['image']
+    filesize = float(request.data['filesize'])
     if nft.objects.filter(metadata_url=metadataURL).exists():
         return Response({"status": "Already exists"})
+    storage_used = 0
+    storage_limit = 5120
+    if individual.objects.filter(account=account).exists():
+        this_individual = individual.objects.filter(account=account).first()
+        storage_used = this_individual.storage_used
+        storage_limit = this_individual.storage_limit
+    else:
+        this_individual = individual.objects.create(
+            account=account, storage_used=storage_used, storage_limit=storage_limit)
+    if (storage_used + filesize) > storage_limit:
+        return Response({"status": "Storage exceeded"})
+    else:
+        this_individual.storage_used = this_individual.storage_used + filesize
+        this_individual.save()
     (token_id, tx_hash) = create_certificate(account, metadataURL)
     response_object = {
         "status": "Success",
@@ -234,7 +265,7 @@ def file_upload(request):
                        name=name,
                        description=description,
                        token_id=token_id,
-                       file_url=imageURL, metadata_url=metadataURL, is_live=True, is_verified=False, issuer=account)    
+                       file_url=imageURL, metadata_url=metadataURL, is_live=True, is_verified=False, issuer=account)
     return Response(response_object)
 
 
@@ -255,6 +286,12 @@ def get_certificates(request):
 
     print(response_object)
     return Response(response_object)
+
+
+@api_view(["GET"])
+def issue_eo_certs(request):
+    issuecertificates()
+    return Response({"status": "Success"})
 
 
 # @api_view(["POST"])

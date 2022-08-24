@@ -19,6 +19,11 @@ class nft(models.Model):
     is_verified = models.BooleanField(default=False)
     issuer = models.CharField(max_length=50, default=owner)
 
+class individual(models.Model):
+    account = models.CharField(max_length=50)
+    storage_used = models.FloatField()
+    storage_limit = models.FloatField()
+
 
 class issuer(models.Model):
     account = models.CharField(max_length=50)

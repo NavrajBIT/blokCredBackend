@@ -23,9 +23,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = "django-insecure-x^ln1=*2hc=t%f8pd-yohi+m1x@qwk*)0p#(&s)_i=d3o+gy+y"
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
-ALLOWED_HOSTS = ["localhost"]
+ALLOWED_HOSTS = ["http://43.205.120.84"]
 
 
 # Application definition
@@ -57,7 +57,7 @@ MIDDLEWARE = [
 ROOT_URLCONF = "blokcred.urls"
 
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
+    "http://43.205.120.84:3000", "http:bitmemoir.com", "https:bitmemoir.com","http:bitmemoir.org", "https:bitmemoir.org"
 ]
 
 

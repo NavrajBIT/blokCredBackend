@@ -19,7 +19,8 @@ abi = contract_json["abi"]
 bytecode = contract_json["bytecode"]
 
 
-w3 = Web3(Web3.HTTPProvider("https://matic-mumbai.chainstacklabs.com"))
+# w3 = Web3(Web3.HTTPProvider("https://matic-mumbai.chainstacklabs.com"))
+w3 = Web3(Web3.HTTPProvider("https://polygon-rpc.com"))
 w3.eth.defaultAccount = public_key
 w3.middleware_onion.inject(geth_poa_middleware, layer=0)
 myContract = w3.eth.contract(address=contract_address, abi=abi)
@@ -62,7 +63,7 @@ def create_souvenir(account, metadata, contract_address):
         )
         print("Signed transaction transaction...")    
         tx_data = w3.eth.send_raw_transaction(signed_transaction.rawTransaction)
-    # receipt = w3.eth.wait_for_transaction_receipt(tx_data)
+    receipt = w3.eth.wait_for_transaction_receipt(tx_data)
     print("transaction sent...")
     token_id = myContract.functions.tokenCounter().call()
     print(token_id)
@@ -97,7 +98,7 @@ def create_certificate(account, metadata):
         )
         print("Signed transaction transaction...")    
         tx_data = w3.eth.send_raw_transaction(signed_transaction.rawTransaction)
-    # receipt = w3.eth.wait_for_transaction_receipt(tx_data)
+    receipt = w3.eth.wait_for_transaction_receipt(tx_data)
     print("transaction sent...")
     token_id = myContract.functions.tokenCounter().call()
     print(token_id)
