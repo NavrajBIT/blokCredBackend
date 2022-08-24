@@ -25,7 +25,7 @@ SECRET_KEY = "django-insecure-x^ln1=*2hc=t%f8pd-yohi+m1x@qwk*)0p#(&s)_i=d3o+gy+y
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-ALLOWED_HOSTS = ["http://43.205.120.84"]
+ALLOWED_HOSTS = ["43.205.120.84"]
 
 
 # Application definition
@@ -45,20 +45,26 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "corsheaders.middleware.CorsMiddleware",
-    "django.middleware.common.CommonMiddleware",
+    
 ]
 
 ROOT_URLCONF = "blokcred.urls"
 
 CORS_ALLOWED_ORIGINS = [
-    "http://43.205.120.84:3000", "http:bitmemoir.com", "https:bitmemoir.com","http:bitmemoir.org", "https:bitmemoir.org"
+    "http://43.205.120.84:3000", "http://bitmemoir.com", "https://bitmemoir.com","http://bitmemoir.org", "https://bitmemoir.org", "http://localhost:3000", "http://127.0.0.1:3000"
 ]
+
+CSRF_TRUSTED_ORIGINS = [
+     "http://43.205.120.84:3000", "http://bitmemoir.com", "https://bitmemoir.com","http://bitmemoir.org", "https://bitmemoir.org", "http://localhost:3000", "http://127.0.0.1:3000"
+]
+
+
 
 
 TEMPLATES = [

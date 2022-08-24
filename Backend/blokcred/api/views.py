@@ -55,6 +55,7 @@ def check_admin(request):
 
 @api_view(["GET"])
 def get_certs(request):
+    print(request)
     if kpi.objects.filter(id=1).exists():
         kpi_model = kpi.objects.filter(id=1).first()
     else:
