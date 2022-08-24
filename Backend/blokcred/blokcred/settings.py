@@ -64,7 +64,7 @@ CSRF_TRUSTED_ORIGINS = [
      "http://43.205.120.84:3000", "http://bitmemoir.com", "https://bitmemoir.com","http://bitmemoir.org", "https://bitmemoir.org", "http://localhost:3000", "http://127.0.0.1:3000"
 ]
 
-CORS_ALLOW_ALL_ORIGINS: True
+
 
 
 
