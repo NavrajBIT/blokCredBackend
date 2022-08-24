@@ -25,7 +25,7 @@ SECRET_KEY = "django-insecure-x^ln1=*2hc=t%f8pd-yohi+m1x@qwk*)0p#(&s)_i=d3o+gy+y
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-ALLOWED_HOSTS = ["43.205.120.84"]
+ALLOWED_HOSTS = ["3.7.212.160"]
 
 
 # Application definition
@@ -54,14 +54,15 @@ MIDDLEWARE = [
     
 ]
 
+
 ROOT_URLCONF = "blokcred.urls"
 
 CORS_ALLOWED_ORIGINS = [
-    "http://43.205.120.84:3000", "http://bitmemoir.com", "https://bitmemoir.com","http://bitmemoir.org", "https://bitmemoir.org", "http://localhost:3000", "http://127.0.0.1:3000"
+    "http://3.7.212.160:3000", "https://3.7.212.160:3000",  "http://bitmemoir.com", "https://bitmemoir.com","http://bitmemoir.org", "https://bitmemoir.org"
 ]
 
 CSRF_TRUSTED_ORIGINS = [
-     "http://43.205.120.84:3000", "http://bitmemoir.com", "https://bitmemoir.com","http://bitmemoir.org", "https://bitmemoir.org", "http://localhost:3000", "http://127.0.0.1:3000"
+     "http://3.7.212.160:3000", "https://3.7.212.160:3000", "http://bitmemoir.com", "https://bitmemoir.com","http://bitmemoir.org", "https://bitmemoir.org"
 ]
 
 
