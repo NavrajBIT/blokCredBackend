@@ -19,13 +19,14 @@ abi = contract_json["abi"]
 bytecode = contract_json["bytecode"]
 
 
-# w3 = Web3(Web3.HTTPProvider("https://matic-mumbai.chainstacklabs.com"))
-w3 = Web3(Web3.HTTPProvider("https://polygon-rpc.com"))
+w3 = Web3(Web3.HTTPProvider("https://polygon-mumbai.g.alchemy.com/v2/CNCI8Fo64T3PScr0dquiyuZr0w1vzvGU"))
+# w3 = Web3(Web3.HTTPProvider("https://polygon-rpc.com"))
 w3.eth.defaultAccount = public_key
 w3.middleware_onion.inject(geth_poa_middleware, layer=0)
 myContract = w3.eth.contract(address=contract_address, abi=abi)
 
-def deploy_contract(name):    
+def deploy_contract(name):  
+    print("deploying contract.....")  
     new_contract = w3.eth.contract(abi=abi, bytecode=bytecode)
     nonce = w3.eth.get_transaction_count(public_key)
     new_tx = new_contract.constructor(name, name).build_transaction({"from": public_key, "nonce": nonce})
@@ -65,9 +66,9 @@ def create_souvenir(account, metadata, contract_address):
         tx_data = w3.eth.send_raw_transaction(signed_transaction.rawTransaction)
     receipt = w3.eth.wait_for_transaction_receipt(tx_data)
     print("transaction sent...")
-    token_id = myContract.functions.tokenCounter().call()
-    print(token_id)
-    return (token_id, tx_data.hex())
+    # token_id = myContract.functions.tokenCounter().call()
+    print(receipt)
+    return (2, tx_data.hex())
 
 
 
@@ -100,6 +101,7 @@ def create_certificate(account, metadata):
         tx_data = w3.eth.send_raw_transaction(signed_transaction.rawTransaction)
     receipt = w3.eth.wait_for_transaction_receipt(tx_data)
     print("transaction sent...")
-    token_id = myContract.functions.tokenCounter().call()
-    print(token_id)
-    return (token_id, tx_data.hex())
+    # token_id = myContract.functions.tokenCounter().call()
+    print(receipt)
+    print("tried to print receipt...........")
+    return (10, tx_data.hex())

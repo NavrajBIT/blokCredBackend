@@ -170,6 +170,7 @@ def check_destination(request):
 @api_view(["POST"])
 def souvenir_upload(request):
     print(request.data)
+    print("Preparing Souvenir.......")
     account = request.data["account"]
     name = request.data["name"]
     description = request.data["description"]
@@ -206,9 +207,12 @@ def souvenir_upload(request):
 
 @api_view(["POST"])
 def create_souvenir_image(request):
+    print("create souvenir function --------------------------------")
+    print(request.data)
     image = request.data['image']
     frame_url = request.data['frame_url']
     souvenir_path = add_souvenir_frame(image, frame_url)
+    print(souvenir_path)
     with open(souvenir_path, "rb") as file:
         souvenir = file
         response = HttpResponse(souvenir.read(), content_type="image/png")

@@ -2,6 +2,7 @@ from django.conf import settings
 import os
 import urllib.request
 import random
+import ssl
 
 # Importing the PIL library
 from PIL import Image
@@ -12,6 +13,7 @@ from PIL import ImageFont
 def add_souvenir_frame(base_image, frame_url): 
     filename = frame_url.split("/")[-1]
     print(filename)
+    print("Frame url ------------------------------------------" + frame_url)
     urllib.request.urlretrieve(frame_url, filename)    
     frame_image = Image.open(filename)
     base_image = Image.open(base_image)
