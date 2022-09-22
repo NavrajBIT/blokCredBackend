@@ -4,6 +4,8 @@ from rest_framework.decorators import api_view
 import requests
 import ipfsApi
 from .image_creator import create_image
+from django.shortcuts import render
+
 # from .generateCredentials import generatePassword
 from .contractcalls import create_certificate, deploy_contract, create_souvenir
 from .models import nft, admin, issuer, destination, kpi, individual
@@ -15,13 +17,17 @@ import os
 from .eocerts import issuecertificates
 
 
+def home_page(request):
+    return render(request, "index.html")
+
+
 # Add admin
 @api_view(["POST"])
 def add_admin(request):
     account = request.data["account"]
-    name = request.data['name']
-    designation = request.data['designation']
-    added_by = request.data['addedBy']
+    name = request.data["name"]
+    designation = request.data["designation"]
+    added_by = request.data["addedBy"]
     if admin.objects.filter(account=added_by).exists():
         if admin.objects.filter(account=account).exists():
             existing_admin = admin.objects.filter(account=account).first()
@@ -31,14 +37,14 @@ def add_admin(request):
             existing_admin.save()
         else:
             admin.objects.create(
-                name=name,
-                designation=designation,
-                account=account,
-                added_by=added_by
+                name=name, designation=designation, account=account, added_by=added_by
             )
         return Response({"status": "Success"})
     else:
-        return Response({"status": "Failed", "response": "Only admin can add new admin."})
+        return Response(
+            {"status": "Failed", "response": "Only admin can add new admin."}
+        )
+
 
 # Check if this is the admin
 
@@ -69,9 +75,9 @@ def get_certs(request):
 @api_view(["POST"])
 def add_issuer(request):
     account = request.data["account"]
-    name = request.data['name']
-    description = request.data['description']
-    added_by = request.data['addedBy']
+    name = request.data["name"]
+    description = request.data["description"]
+    added_by = request.data["addedBy"]
     if admin.objects.filter(account=added_by).exists():
         if issuer.objects.filter(account=account).exists():
             existing_issuer = issuer.objects.filter(account=account).first()
@@ -86,11 +92,13 @@ def add_issuer(request):
                 description=description,
                 account=account,
                 added_by=added_by,
-                contract_address=contract_address
+                contract_address=contract_address,
             )
         return Response({"status": "Success"})
     else:
-        return Response({"status": "Failed", "response": "Only admin can add new issuer."})
+        return Response(
+            {"status": "Failed", "response": "Only admin can add new issuer."}
+        )
 
 
 # Check if this is the issuer
@@ -102,6 +110,7 @@ def check_issuer(request):
         issuer_data = model_to_dict(issuer_model)
         return Response({"status": "Success", "credentials": issuer_data})
     return Response({"status": "Failed"})
+
 
 # Get issuer details
 
@@ -125,14 +134,13 @@ def get_issuer(request):
 def add_destination(request):
     print(request)
     account = request.data["account"]
-    name = request.data['name']
-    description = request.data['description']
-    added_by = request.data['addedBy']
-    frame = request.data['frame']
+    name = request.data["name"]
+    description = request.data["description"]
+    added_by = request.data["addedBy"]
+    frame = request.data["frame"]
     if admin.objects.filter(account=added_by).exists():
         if destination.objects.filter(account=account).exists():
-            existing_destination = destination.objects.filter(
-                account=account).first()
+            existing_destination = destination.objects.filter(account=account).first()
             existing_destination.name = name
             existing_destination.description = description
             existing_destination.added_by = added_by
@@ -146,11 +154,13 @@ def add_destination(request):
                 account=account,
                 added_by=added_by,
                 frame=frame,
-                contract_address=contract_address
+                contract_address=contract_address,
             )
         return Response({"status": "Success"})
     else:
-        return Response({"status": "Failed", "response": "Only admin can add new destination."})
+        return Response(
+            {"status": "Failed", "response": "Only admin can add new destination."}
+        )
 
 
 # Check if this is the issuer
@@ -174,26 +184,33 @@ def souvenir_upload(request):
     account = request.data["account"]
     name = request.data["name"]
     description = request.data["description"]
-    metadataURL = request.data['metadata']
-    imageURL = request.data['image']
-    added_by = request.data['addedBy']
+    metadataURL = request.data["metadata"]
+    imageURL = request.data["image"]
+    added_by = request.data["addedBy"]
     this_destination = destination.objects.filter(account=added_by).first()
     contract_address = this_destination.contract_address
     if nft.objects.filter(metadata_url=metadataURL).exists():
         return Response({"status": "Already exists"})
     (token_id, tx_hash) = create_souvenir(
-        account, metadataURL, contract_address=contract_address)
+        account, metadataURL, contract_address=contract_address
+    )
     response_object = {
         "status": "Success",
         "tokenId": token_id,
         "tx_hash": tx_hash,
     }
     print(response_object)
-    nft.objects.create(owner=account,
-                       name=name,
-                       description=description,
-                       token_id=token_id,
-                       file_url=imageURL, metadata_url=metadataURL, is_live=True, is_verified=True, issuer=added_by)
+    nft.objects.create(
+        owner=account,
+        name=name,
+        description=description,
+        token_id=token_id,
+        file_url=imageURL,
+        metadata_url=metadataURL,
+        is_live=True,
+        is_verified=True,
+        issuer=added_by,
+    )
     kpi_model = kpi.objects.filter(id=1).first()
     total_certificates = kpi_model.total_certificates + 1
     only_souvenirs = kpi_model.only_souvenirs + 1
@@ -209,8 +226,8 @@ def souvenir_upload(request):
 def create_souvenir_image(request):
     print("create souvenir function --------------------------------")
     print(request.data)
-    image = request.data['image']
-    frame_url = request.data['frame_url']
+    image = request.data["image"]
+    frame_url = request.data["frame_url"]
     souvenir_path = add_souvenir_frame(image, frame_url)
     print(souvenir_path)
     with open(souvenir_path, "rb") as file:
@@ -228,7 +245,8 @@ def get_individual(request):
         this_individual = individual.objects.filter(account=account).first()
     else:
         this_individual = individual.objects.create(
-            account=account, storage_used=0, storage_limit=5120)
+            account=account, storage_used=0, storage_limit=5120
+        )
     this_individual_dict = model_to_dict(this_individual)
     return Response({"status": "Success", "credentials": this_individual_dict})
 
@@ -240,9 +258,9 @@ def file_upload(request):
     account = request.data["account"]
     name = request.data["name"]
     description = request.data["description"]
-    metadataURL = request.data['metadata']
-    imageURL = request.data['image']
-    filesize = float(request.data['filesize'])
+    metadataURL = request.data["metadata"]
+    imageURL = request.data["image"]
+    filesize = float(request.data["filesize"])
     if nft.objects.filter(metadata_url=metadataURL).exists():
         return Response({"status": "Already exists"})
     storage_used = 0
@@ -253,7 +271,8 @@ def file_upload(request):
         storage_limit = this_individual.storage_limit
     else:
         this_individual = individual.objects.create(
-            account=account, storage_used=storage_used, storage_limit=storage_limit)
+            account=account, storage_used=storage_used, storage_limit=storage_limit
+        )
     if (storage_used + filesize) > storage_limit:
         return Response({"status": "Storage exceeded"})
     else:
@@ -266,11 +285,17 @@ def file_upload(request):
         "tx_hash": tx_hash,
     }
     print(response_object)
-    nft.objects.create(owner=account,
-                       name=name,
-                       description=description,
-                       token_id=token_id,
-                       file_url=imageURL, metadata_url=metadataURL, is_live=True, is_verified=False, issuer=account)
+    nft.objects.create(
+        owner=account,
+        name=name,
+        description=description,
+        token_id=token_id,
+        file_url=imageURL,
+        metadata_url=metadataURL,
+        is_live=True,
+        is_verified=False,
+        issuer=account,
+    )
     return Response(response_object)
 
 
@@ -278,14 +303,14 @@ def file_upload(request):
 @api_view(["POST"])
 def get_certificates(request):
     print(request.data)
-    account = request.data['account']
+    account = request.data["account"]
     account_certificates = list(nft.objects.filter(owner=account))
     response_object = {"status": "Success", "categories": {}}
     for cert in account_certificates:
         mycert = model_to_dict(cert)
         category = mycert["issuer"]
-        if category in response_object['categories'].keys():
-            response_object['categories'][category].append(mycert)
+        if category in response_object["categories"].keys():
+            response_object["categories"][category].append(mycert)
         else:
             response_object["categories"][category] = [mycert]
 

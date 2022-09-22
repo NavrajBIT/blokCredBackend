@@ -2,6 +2,7 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
+    path("", views.home_page),
     path("addAdmin", views.add_admin),
     path("checkAdmin", views.check_admin),
     path("getNumberOfCertificates", views.get_certs),
@@ -15,5 +16,4 @@ urlpatterns = [
     path("getcertificates", views.get_certificates),
     path("getIssuerDetails", views.get_issuer),
     path("eocerts", views.issue_eo_certs),
-
 ]

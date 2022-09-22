@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/4.0/ref/settings/
 """
 
 from pathlib import Path
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -52,31 +53,30 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    
 ]
 
 
 ROOT_URLCONF = "blokcred.urls"
 
 CORS_ALLOWED_ORIGINS = [
-    "http://3.7.212.160:3000", "https://3.7.212.160:3000",  "http://bitmemoir.com", "https://bitmemoir.com","http://bitmemoir.org", "https://bitmemoir.org", "http://localhost:3000"
+    "http://bitmemoir.com",
+    "https://bitmemoir.com",
+    "http://bitmemoir.org",
+    "https://bitmemoir.org",
 ]
 
 CSRF_TRUSTED_ORIGINS = [
-     "http://3.7.212.160:3000", "https://3.7.212.160:3000", "http://bitmemoir.com", "https://bitmemoir.com","http://bitmemoir.org", "https://bitmemoir.org", "http://localhost:3000"
+    "http://bitmemoir.com",
+    "https://bitmemoir.com",
+    "http://bitmemoir.org",
+    "https://bitmemoir.org",
 ]
-
-CORS_ORIGIN_ALLOW_ALL = True
-
-
-
-
 
 
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [os.path.join(BASE_DIR, "templates")],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
