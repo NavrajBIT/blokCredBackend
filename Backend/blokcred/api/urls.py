@@ -15,5 +15,5 @@ urlpatterns = [
     path("addSouvenir", views.souvenir_upload),
     path("getcertificates", views.get_certificates),
     path("getIssuerDetails", views.get_issuer),
-    path("eocerts", views.issue_eo_certs),
+    
 ]

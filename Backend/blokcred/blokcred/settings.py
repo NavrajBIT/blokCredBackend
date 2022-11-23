@@ -27,7 +27,7 @@ SECRET_KEY = "django-insecure-x^ln1=*2hc=t%f8pd-yohi+m1x@qwk*)0p#(&s)_i=d3o+gy+y
 DEBUG = True
 
 # ALLOWED_HOSTS = ["*"]
-ALLOWED_HOSTS = ["3.7.212.160"]
+ALLOWED_HOSTS = ["3.7.212.160", "localhost", "127.0.0.1"]
 
 
 # Application definition
@@ -63,6 +63,7 @@ CORS_ALLOWED_ORIGINS = [
     "https://bitmemoir.com",
     "http://bitmemoir.org",
     "https://bitmemoir.org",
+    "http://localhost:3000"
 ]
 
 CSRF_TRUSTED_ORIGINS = [

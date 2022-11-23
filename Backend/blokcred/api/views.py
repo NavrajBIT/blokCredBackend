@@ -1,9 +1,5 @@
-from urllib import response
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
-import requests
-import ipfsApi
-from .image_creator import create_image
 from django.shortcuts import render
 
 # from .generateCredentials import generatePassword
@@ -14,7 +10,7 @@ from django.forms.models import model_to_dict
 from .souvenir_creator import add_souvenir_frame
 from django.http import HttpResponse
 import os
-from .eocerts import issuecertificates
+
 
 
 def home_page(request):
@@ -318,10 +314,6 @@ def get_certificates(request):
     return Response(response_object)
 
 
-@api_view(["GET"])
-def issue_eo_certs(request):
-    issuecertificates()
-    return Response({"status": "Success"})
 
 
 # @api_view(["POST"])
