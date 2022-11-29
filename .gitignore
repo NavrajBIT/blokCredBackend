@@ -1,3 +1,5 @@
 api/contract_config.py
 db.sqlite3
 media/
+api/__pycache__
+blokcred/__pycache__
