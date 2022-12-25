@@ -59,7 +59,7 @@ def get_metadata_url(asset_name, asset_description, image):
 
 def get_all_nfts(account):
     url = (
-        "https://polygon-mumbai.g.alchemy.com/v2/qgntfG4-Q_3_4C7v6i0wg709xT8_-Fcc/getNFTs?owner="
+        "https://polygon-mainnet.g.alchemy.com/v2/4H5vwII7kCyZ4CabkkYlwtRiagTT-ZOG/getNFTs?owner="
         + account
     )
     response = requests.get(url=url)

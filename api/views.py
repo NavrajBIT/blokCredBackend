@@ -6,9 +6,10 @@ from .contractcalls import create_certificate, deploy_contract
 from .models import Admin, User
 from .contract_config import config
 from .storagecalls import get_metadata_url, get_all_nfts, upload_image, add_frame
+from web3 import Web3
 
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = "https://bitmemoir.org"
 
 
 def home_page(request):
@@ -19,7 +20,7 @@ def home_page(request):
 def admin(request):
     try:
         account = request.data["account"]
-        new_admin_account = request.data["new_admin_account"]
+        new_admin_account = Web3.toChecksumAddress(request.data["new_admin_account"])
         name = request.data["name"]
         designation = request.data["designation"]
         if Admin.objects.filter(account=new_admin_account).exists():
@@ -34,8 +35,8 @@ def admin(request):
             return Response({"status": "Success", "response": "Admin added"})
     except:
         pass
-    try:
-        account = request.data["account"]
+    try:      
+        account = Web3.toChecksumAddress(request.data["account"])
         if Admin.objects.filter(account=account).exists():
             admin = Admin.objects.get(account=account)
             admin_model = model_to_dict(admin)
@@ -72,7 +73,7 @@ user_admin_keys = [
 @api_view(["POST", "GET"])
 def user(request):
     try:
-        account = request.data["account"]
+        account = Web3.toChecksumAddress(request.data["account"])
     except:
         return Response({"status": "Failed", "response": "Account is required"})
     try:
@@ -81,9 +82,6 @@ def user(request):
             all_users = list(User.objects.all())
             all_users_sorted = []
             for user in all_users:
-                print("---------------------------------------------------------------------")
-                print(user)
-                print(user.frames)
                 user_model = model_to_dict(user)
                 try:
                     user_model["idProof"] = BASE_URL + user_model["idProof"].url
@@ -95,8 +93,8 @@ def user(request):
             return Response({"status": "Failed", "response": "Admin not found"})
     except:
         pass
-    if not User.objects.filter(account=request.data["account"]).exists():
-        User.objects.create(account=account)
+    if not User.objects.filter(account=account).exists():           
+        User.objects.create(account=account)        
     user = User.objects.get(account=account)
     for item in request.data.keys():
         if item in user_self_keys:
@@ -110,7 +108,7 @@ def user(request):
                 user.status = "in_progress"
         elif item in user_admin_keys:
             try:
-                if Admin.objects.filter(account=request.data["admin"]).exists():
+                if Admin.objects.filter(account=account).exists():
                     setattr(user, item, request.data[item])
                     if request.data[item] == "Approved":
                         contract_address = deploy_contract(user.name)
@@ -164,7 +162,7 @@ def nft(request):
 
 
 def mint_individual_nft(request):
-    account = request.data["account"]
+    account = Web3.toChecksumAddress(request.data["account"])
     image = request.data["image"]
     asset_name = request.data["asset_name"]
     asset_description = request.data["asset_description"]
@@ -188,17 +186,18 @@ def mint_individual_nft(request):
 
 
 def get_nfts(request):
-    nfts = get_all_nfts(request.data["account"])
+    account = Web3.toChecksumAddress(request.data["account"])
+    nfts = get_all_nfts(account)
     return Response({"status": "Success", "response": nfts})
 
 
 def mint_souvenir(request):
     print("-----------------------------------------------------")
-    account = request.data["account"]
+    account = Web3.toChecksumAddress(request.data["account"])
     image = request.data["image"]
     asset_name = request.data["asset_name"]
     asset_description = request.data["asset_description"]
-    recipient = request.data["recipient"]
+    recipient = Web3.toChecksumAddress(request.data["recipient"])
     frame = request.data["frame"]
     if frame == "":
         framed_image = image

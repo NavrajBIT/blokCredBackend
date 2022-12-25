@@ -8,7 +8,7 @@ def name_file(instance, filename):
 class Admin(models.Model):
     name = models.CharField(max_length=50, default="BIT")
     designation = models.CharField(max_length=50, default="Developer")
-    account = models.CharField(max_length=50)
+    account = models.CharField(max_length=50, unique=True)
     added_by = models.CharField(max_length=50)
 
 
@@ -18,7 +18,7 @@ class User(models.Model):
     description = models.CharField(max_length=500, blank=True)
     website = models.CharField(max_length=25, blank=True)
     email = models.CharField(max_length=25, blank=True)
-    contact = models.IntegerField(blank=True)
+    contact = models.IntegerField(blank=True, null=True)
     regId = models.CharField(max_length=50, blank=True)
     idProof = models.ImageField(upload_to=name_file, blank=True, null=True)
     comment = models.CharField(max_length=100, blank=True)

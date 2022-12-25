@@ -3,3 +3,6 @@ db.sqlite3
 media/
 api/__pycache__
 blokcred/__pycache__
+api/migrations
+node_modules
+static
