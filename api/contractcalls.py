@@ -19,9 +19,9 @@ bytecode = contract_json["bytecode"]
 
 
 # w3 = Web3(Web3.HTTPProvider("https://polygon-mumbai.g.alchemy.com/v2/CNCI8Fo64T3PScr0dquiyuZr0w1vzvGU"))
-w3 = Web3(Web3.HTTPProvider("https://polygon-mainnet.g.alchemy.com/v2/4H5vwII7kCyZ4CabkkYlwtRiagTT-ZOG"))
+# w3 = Web3(Web3.HTTPProvider("https://polygon-mainnet.g.alchemy.com/v2/4H5vwII7kCyZ4CabkkYlwtRiagTT-ZOG"))
 # w3 = Web3(Web3.HTTPProvider("https://polygon-rpc.com"))
-# w3 = Web3(Web3.HTTPProvider("HTTP://127.0.0.1:8545"))
+w3 = Web3(Web3.HTTPProvider("HTTP://127.0.0.1:8545"))
 w3.eth.defaultAccount = public_key
 w3.middleware_onion.inject(geth_poa_middleware, layer=0)
 myContract = w3.eth.contract(address=contract_address, abi=abi)
@@ -32,7 +32,11 @@ def deploy_contract(name):
     new_contract = w3.eth.contract(abi=abi, bytecode=bytecode)
     nonce = w3.eth.get_transaction_count(public_key)
     new_tx = new_contract.constructor(name, name).build_transaction(
-        {"from": public_key, "nonce": nonce}
+        {
+            "from": public_key,
+            "nonce": nonce,
+            "gasPrice": w3.eth.gas_price,
+        }
     )
     signed_tx = w3.eth.account.sign_transaction(new_tx, private_key)
     tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
@@ -43,9 +47,9 @@ def deploy_contract(name):
 
 def create_certificate(account, metadata, contract_address):
     account = Web3.toChecksumAddress(account)
-    souvenirContract = w3.eth.contract(address=contract_address, abi=abi)
+    my_contract = w3.eth.contract(address=contract_address, abi=abi)
     nonce = w3.eth.get_transaction_count(public_key)
-    createCertificate_tx = souvenirContract.functions.createCertificate(
+    createCertificate_tx = my_contract.functions.createCertificate(
         metadata, account
     ).build_transaction(
         {
@@ -59,9 +63,15 @@ def create_certificate(account, metadata, contract_address):
     )
     tx_data = w3.eth.send_raw_transaction(signed_transaction.rawTransaction)
     receipt = w3.eth.wait_for_transaction_receipt(tx_data)
-    token_id = myContract.functions.tokenCounter().call()
+    token_id = my_contract.functions.tokenCounter().call()
     print(token_id)
     return tx_data.hex()
+
+
+def get_token_id(contract_address):
+    my_contract = w3.eth.contract(address=contract_address, abi=abi)
+    token_id = int(my_contract.functions.tokenCounter().call()) + 1
+    return token_id
 
 
 def get_nft_category(contract_address):
@@ -73,3 +83,11 @@ def get_nft_category(contract_address):
     #     contract_name = contract_address
     print(contract_name)
     return contract_name
+
+
+def get_contract_details(contract_address, token_id):
+    token_id = int(token_id)
+    my_contract = w3.eth.contract(address=contract_address, abi=abi)
+    owner = my_contract.functions.ownerOf(token_id).call()
+    metadata_uri = my_contract.functions.tokenURI(token_id).call()
+    return owner, metadata_uri

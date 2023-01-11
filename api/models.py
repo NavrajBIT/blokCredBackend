@@ -2,7 +2,7 @@ from django.db import models
 
 
 def name_file(instance, filename):
-    return "/".join(["images", str(instance.account), filename])
+    return "/".join([ str(instance.account), "id_proof", filename])
 
 
 class Admin(models.Model):
