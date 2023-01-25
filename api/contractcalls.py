@@ -90,4 +90,8 @@ def get_contract_details(contract_address, token_id):
     my_contract = w3.eth.contract(address=contract_address, abi=abi)
     owner = my_contract.functions.ownerOf(token_id).call()
     metadata_uri = my_contract.functions.tokenURI(token_id).call()
+    # event_filter = my_contract.events.Transfer.build_filter()
+    # event_filter.args.clientGroups.match_any(0, 0, token_id)
+    # print(event_filter)
+
     return owner, metadata_uri

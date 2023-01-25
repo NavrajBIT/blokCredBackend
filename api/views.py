@@ -19,6 +19,7 @@ import qrcode
 from django.conf import settings
 from pathlib import Path
 import requests
+from django.core.mail import send_mail, EmailMessage
 
 
 BASE_DIR = settings.BASE_DIR
@@ -275,7 +276,10 @@ def mint_souvenir(request):
         framed_image = add_frame(base_image=image, frame_name=frame, user=user)
     contract_address = user.contract_address
     metadata_url = save_souvenir(
-        asset_name=asset_name, asset_description=asset_description, image=framed_image, user=user
+        asset_name=asset_name,
+        asset_description=asset_description,
+        image=framed_image,
+        user=user,
     )
     tx_hash = create_certificate(
         account=recipient,
@@ -305,6 +309,16 @@ def mint_certificate(request):
         variable2=variable2,
         token_id=token_id,
     )
+    dir_path = (
+        str(BASE_DIR)
+        + "/media/"
+        + user.account
+        + "/printed_certificates/"
+        + template
+        + "/"
+        + user.contract_address
+    )
+    filepath = dir_path + "/" + token_id + ".png"
     download_filepath = (
         str(BASE_URL)
         + "/media/"
@@ -340,6 +354,17 @@ def mint_certificate(request):
         )
         user.total_certificates = user.total_certificates + 1
         user.save()
+        try:
+            email = request.data["email"]
+            send_cert_email(
+                recipient=email,
+                file=filepath,
+                recipient_name=variable1,
+                sender_name=user.name,
+            )
+        except Exception as e:
+            print(e)
+            pass
         return Response({"status": "Success"})
     else:
         return Response({"status": "Failed", "response": "Invalid request type"})
@@ -384,6 +409,16 @@ def mint_bulk_certificate(request):
             )
             user.total_certificates = user.total_certificates + 1
             user.save()
+            dir_path = (
+                str(BASE_DIR)
+                + "/media/"
+                + user.account
+                + "/printed_certificates/"
+                + template
+                + "/"
+                + user.contract_address
+            )
+            filepath = dir_path + "/" + token_id + ".png"
             download_filepath = (
                 str(BASE_URL)
                 + "/media/"
@@ -396,6 +431,17 @@ def mint_bulk_certificate(request):
                 + token_id
                 + ".png"
             )
+            try:
+                email = cert["email"]
+                send_cert_email(
+                    recipient=email,
+                    file=filepath,
+                    recipient_name=variable1,
+                    sender_name=user.name,
+                )
+            except Exception as e:
+                print(e)
+                pass
             response_data.append(
                 {
                     "recipient": recipient,
@@ -404,7 +450,9 @@ def mint_bulk_certificate(request):
                     "image": download_filepath,
                 }
             )
-        except:
+
+        except Exception as e:
+            print(e)
             response_data.append({"recipient": recipient, "status": "Failed"})
     return Response({"status": "Success", "response": response_data})
 
@@ -556,7 +604,7 @@ def create_certificate_image(user, template, variable1, variable2, token_id):
         + template
         + "/"
         + user.contract_address
-    )    
+    )
     filepath = dir_path + "/" + token_id + ".png"
     Path(dir_path).mkdir(parents=True, exist_ok=True)
     new_cert.save(filepath)
@@ -600,6 +648,7 @@ def save_frame(image, user):
         str(BASE_URL) + "/media/" + user.account + "/frames/" + image.name
     )
     return download_filepath
+
 
 def save_souvenir(image, user, asset_name, asset_description):
     print("Saving souvenir")
@@ -667,3 +716,24 @@ def verify_cert(request):
                 },
             }
         )
+
+
+def send_cert_email(recipient, file, recipient_name, sender_name):
+    subject = "Verified certificate recieved."
+    message = (
+        "Hi"
+        + recipient_name
+        + ",\nYou have recieved a verified certificate from "
+        + sender_name
+        + ". \n"
+    )
+    sender = "navraj@beimagine.tech"
+    recipients = [recipient]
+    email = EmailMessage(
+        subject=subject,
+        body=message,
+        from_email=sender,
+        to=recipients,
+    )
+    email.attach_file(file)
+    email.send(fail_silently=False)
