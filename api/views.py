@@ -7,10 +7,11 @@ from .contractcalls import (
     deploy_contract,
     get_token_id,
     get_contract_details,
+    update_certificate
 )
 from .models import Admin, User
 from .contract_config import config
-from .storagecalls import get_metadata_url, get_all_nfts, upload_image, add_frame
+from .storagecalls import get_metadata_url,get_metadata_url_dnft, get_all_nfts, upload_image, add_frame
 from web3 import Web3
 import json
 from django.core.files.storage import default_storage
@@ -19,10 +20,38 @@ import qrcode
 from django.conf import settings
 from pathlib import Path
 import requests
+from datetime import date
 
+from django.conf import settings
+from . import contract_config
+import json
+import os
+
+from web3 import Web3
+from web3.middleware import geth_poa_middleware
 
 BASE_DIR = settings.BASE_DIR
 BASE_URL = "http://localhost:8000"
+
+# Contract data
+contract_address = contract_config.config["contract_address"]
+public_key = contract_config.config["public_key"]
+private_key = contract_config.config["private_key"]
+contract_filepath = os.path.join(settings.BASE_DIR, "api/compiledContract.json")
+with open(contract_filepath, "r") as file:
+    contract_json = json.load(file)
+abi = contract_json["abi"]
+bytecode = contract_json["bytecode"]
+
+
+# w3 = Web3(Web3.HTTPProvider("https://polygon-mumbai.g.alchemy.com/v2/CNCI8Fo64T3PScr0dquiyuZr0w1vzvGU"))
+# w3 = Web3(Web3.HTTPProvider("https://polygon-mainnet.g.alchemy.com/v2/4H5vwII7kCyZ4CabkkYlwtRiagTT-ZOG"))
+# w3 = Web3(Web3.HTTPProvider("https://polygon-rpc.com"))
+# w3 = Web3(Web3.HTTPProvider("HTTP://127.0.0.1:8545"))
+w3 = Web3(Web3.HTTPProvider("https://polygon-mumbai.g.alchemy.com/v2/grUWncEJ7W6uEsFhwdjcdVzDJPktAulv"))
+w3.eth.defaultAccount = public_key
+w3.middleware_onion.inject(geth_poa_middleware, layer=0)
+myContract = w3.eth.contract(address=contract_address, abi=abi)
 
 
 def home_page(request):
@@ -244,7 +273,7 @@ def mint_individual_nft(request):
             asset_name=asset_name, asset_description=asset_description, image=image
         )
         tx_hash = create_certificate(
-            account=user.account,
+            account=account,
             metadata=metadata_url,
             contract_address=contract_address,
         )
@@ -667,3 +696,285 @@ def verify_cert(request):
                 },
             }
         )
+        
+@api_view(["POST", "GET"])
+def mint_reward_nft(request):
+    account = Web3.toChecksumAddress(request.data["account"])
+    nameOfOrg= request.data["nameOfOrg"]
+    image = request.data["image"]
+    isMembership = request.data["isMembership"]
+    membership = request.data["membership"]
+    issue_date_nft = date.today()
+    isReward= request.data["isReward"]
+    reward= request.data["reward"]
+    issue_date_reward= str(date.today())
+    expiray_date_of_reward= request.data["expiray_date_of_reward"]
+    expiry_date_of_membership = request.data["expiry_date_of_membership"]
+    print("isMembership",isMembership)
+    print("isReward",isReward)
+ 
+
+    
+    try:
+        
+        if isMembership == "true" and isReward== 'true':
+            print("isMembership and isReward......")
+            contract_address = config['contract_address']
+            print("contract_address",contract_address)
+            metadata_url = get_metadata_url_dnft(
+                nameOfOrg=nameOfOrg,
+                image=image,
+                issue_date_nft=issue_date_nft,
+                membership=membership,
+                expiry_date_memberShip=expiry_date_of_membership,
+                rewards=[{"reward":reward,"issue_date_reward":issue_date_reward,"expiry_date_reward":expiray_date_of_reward,'is_claimed':False,}]
+            )
+            print("metadata_url",metadata_url)
+
+            tx_hash = create_certificate(
+                account=account,
+                metadata=metadata_url,
+                contract_address=contract_address
+            )
+            
+            return Response({"status": "Success", "response": tx_hash})
+        elif isMembership == 'true':
+            print("isMembership......")
+            contract_address = config['contract_address']
+            metadata_url = get_metadata_url_dnft(
+                nameOfOrg=nameOfOrg,
+                image=image,
+                issue_date_nft=issue_date_nft,
+                membership=membership,
+                expiry_date_memberShip=expiry_date_of_membership,
+            )
+            print("metadata_url",metadata_url)
+            tx_hash = create_certificate(
+                account=account,
+                metadata=metadata_url,
+                contract_address=contract_address,
+            )
+            
+            return Response({"status": "Success", "response": tx_hash})
+        elif isReward == 'true':
+            print("isReward......")
+            contract_address = config['contract_address']
+            metadata_url = get_metadata_url_dnft(
+                nameOfOrg=nameOfOrg,
+                image=image,
+                membership=membership,
+                issue_date_nft=issue_date_nft,
+                rewards=[{"reward":reward,"issue_date_reward":issue_date_reward,"expiry_date_reward":expiray_date_of_reward,'is_claimed':False,}],
+            )
+            print("metadata_url",metadata_url)
+            tx_hash = create_certificate(
+                account=account,
+                metadata=metadata_url,
+                contract_address=contract_address,
+            )
+            
+            return Response({"status": "Success", "response": tx_hash})
+        else:
+            print("else......")
+            contract_address = config['contract_address']
+            metadata_url = get_metadata_url_dnft(
+                nameOfOrg=nameOfOrg,
+                image=image,
+                membership=membership,
+                issue_date_nft=issue_date_nft,
+            )
+            print("metadata_url",metadata_url)
+            tx_hash = create_certificate(
+                account=account,
+                metadata=metadata_url,
+                contract_address=contract_address,
+            )
+            
+            return Response({"status": "Success", "response": tx_hash})
+    except Exception as e:
+        print(e)
+        return Response({"status": "Failure", "response": "Invalid data."})
+    
+@api_view(["POST", "GET"])
+def view_dnft_reward(request):
+    account = Web3.toChecksumAddress(request.data["account"])
+    url=f"https://polygon-mumbai.g.alchemy.com/v2/grUWncEJ7W6uEsFhwdjcdVzDJPktAulv/getNFTs?owner={account}&contractAddresses%5B%5D={'0x751554101A9300A2b6fC6f857aEe71E2b52B522C'}"
+    data = requests.get(url).json()
+    data=data['ownedNfts']
+    data_lst=[]
+    for nft in data:
+        if nft['title'] =='XYZ':
+            token_id = int(nft['id']['tokenId'],0)
+            uri = myContract.functions.tokenURI(token_id).call()
+            uri_data= requests.get(uri).json()
+            data_lst.append({
+                'Token_id':token_id,
+                "metadata":uri_data
+            })
+        
+    return Response({"status": "Success", "response": data_lst})
+    
+    
+    
+    
+    
+    
+    
+@api_view(["POST", "GET"])
+def update_reward_nft(request):
+    account = Web3.toChecksumAddress(request.data["account"])
+    nameOfOrg= request.data["nameOfOrg"]
+    image = request.data["image"]
+    isMembership = request.data["isMembership"]
+    membership = request.data["membership"]
+    # issue_date_nft = date.today()
+    # issue_date_nft= request.data["issue_date_nft"]
+    isReward= request.data["isReward"]
+    reward= request.data["reward"]
+    issue_date_reward= str(date.today())
+    expiray_date_of_reward= request.data["expiray_date_of_reward"]
+    expiry_date_of_membership = request.data["expiry_date_of_membership"]
+    token_id = int(request.data["token_id"])
+    uri = myContract.functions.tokenURI(token_id).call()
+    print(uri)
+    
+    data = requests.get(uri).json()
+    rewards = data['rewards']
+    if isReward == 'true':
+        rewards.append({"reward":reward,"issue_date_reward":issue_date_reward,"expiry_date_reward":expiray_date_of_reward,'is_claimed':False,})
+    issue_date_nft = data['issue_date_nft']
+    print("isMembership",isMembership)
+    print("isReward",isReward)
+    
+    
+    try:   
+        if isMembership == 'true' and isReward== 'true':
+            print("isMembership and isReward......")
+            contract_address = config['contract_address']
+            print("contract_address",contract_address)
+            metadata_url = get_metadata_url_dnft(
+                nameOfOrg=nameOfOrg,
+                image=image,
+                issue_date_nft=issue_date_nft,
+                membership=membership,
+                expiry_date_memberShip=expiry_date_of_membership,
+                rewards=rewards,
+            )
+            print("metadata_url",metadata_url)
+
+            tx_hash = update_certificate(
+                metadata= metadata_url,
+                contract_address=contract_address,
+                token_id= token_id,
+            ) 
+            return Response({"status": "Success", "response": tx_hash})
+        
+        elif isMembership == 'true':
+            print("isMembership......")
+            contract_address = config['contract_address']
+            metadata_url = get_metadata_url_dnft(
+                nameOfOrg=nameOfOrg,
+                image=image,
+                issue_date_nft=issue_date_nft,
+                membership=membership,
+                expiry_date_memberShip=expiry_date_of_membership,
+                rewards=rewards,
+            )
+            tx_hash = update_certificate(
+                metadata= metadata_url,
+                contract_address=contract_address,
+                token_id= token_id,
+            ) 
+            
+            return Response({"status": "Success", "response": tx_hash})
+        elif isReward =='true':
+            print("isReward......")
+            contract_address = config['contract_address']
+            metadata_url = get_metadata_url_dnft(
+                nameOfOrg=nameOfOrg,
+                image=image,
+                membership=membership,
+                expiry_date_memberShip=expiry_date_of_membership,
+                issue_date_nft=issue_date_nft,
+                rewards=rewards,
+            )
+            tx_hash = update_certificate(
+                metadata= metadata_url,
+                contract_address=contract_address,
+                token_id= token_id,
+            ) 
+            
+            return Response({"status": "Success", "response": tx_hash})
+        else:
+            print("else......")
+            contract_address = config['contract_address']
+            metadata_url = get_metadata_url_dnft(
+                nameOfOrg=nameOfOrg,
+                image=image,
+                membership=membership,
+                issue_date_nft=issue_date_nft,
+            )
+            tx_hash = update_certificate(
+                metadata= metadata_url,
+                contract_address=contract_address,
+                token_id= token_id,
+            ) 
+            
+            return Response({"status": "Success", "response": tx_hash})
+    except Exception as e:
+        print(e)
+        return Response({"status": "Failure", "response": "Invalid data."})
+    # return Response({"status": "Success", "response": "Invalid data."})
+    
+    
+@api_view(["POST", "GET"])
+def claim_reward(request):
+    # account = Web3.toChecksumAddress(request.data["account"])
+    token_id = int(request.data["token_id"])
+    arr_index = int(request.data["arr_index"])
+    uri = myContract.functions.tokenURI(token_id).call()
+    data = requests.get(uri).json()
+    rewards = data['rewards']
+    rewards[arr_index]['is_claimed']=True
+    
+    # print(data['rewards'])
+    
+    try:
+        print("isReward......")
+        contract_address = config['contract_address']
+        metadata_url = get_metadata_url_dnft(
+            nameOfOrg=data['name'],
+            image=data['image'],
+            membership=data['membership'],
+            issue_date_nft=data['issue_date_nft'],
+            rewards=rewards,
+        )
+        print("metadata_url",metadata_url)
+        tx_hash = update_certificate(
+            metadata= metadata_url,
+            contract_address=contract_address,
+            token_id= token_id,
+        ) 
+        
+        return Response({"status": "Success", "response": 'Success'})
+    except Exception as e:
+        print(e)
+        return Response({"status": "Failure", "response": "Invalid data."})
+
+
+  
+    
+    
+    
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    

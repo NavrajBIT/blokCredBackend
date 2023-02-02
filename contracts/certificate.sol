@@ -3,8 +3,9 @@
 pragma solidity 0.8.14;
 
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
+// import "@openzeppelin/contracts/token/ERC721/extensions/IERC721Enumerable.sol";
 
-contract certificate is ERC721URIStorage {
+contract certificate is ERC721URIStorage{
     uint256 public tokenCounter;
 
     uint256 public ownerCount;
@@ -46,7 +47,7 @@ contract certificate is ERC721URIStorage {
         blockedOwnerToOwnerId[_owner] = blockedOwnerCount;
     }
 
-    function createCertificate(string memory _tokenURI)
+    function createCertificate(string memory _tokenURI, address _receiver)
         public
         onlyOwner
         returns (uint256 newTokenId)
@@ -54,6 +55,46 @@ contract certificate is ERC721URIStorage {
         tokenCounter = tokenCounter + 1;
         _safeMint(msg.sender, tokenCounter);
         _setTokenURI(tokenCounter, _tokenURI);
+        transferFrom(msg.sender, _receiver, tokenCounter);
+        // _tokenIdByOwner[_receiver] = tokenCounter;
+        // tokenBySender[msg.sender][_receiver] = tokenCounter;
         return tokenCounter;
     }
+
+    function updateCertMetadata(uint256 _tokenId, string memory _newTokenURI)
+        public
+    {
+        require(_tokenId > 0 && _tokenId <= tokenCounter);
+        // require(msg.sender == ownerOf(_tokenId));
+        _setTokenURI(_tokenId, _newTokenURI);
+    }
+
+    // mapping(address => uint256) public _tokenIdByOwner;
+    // mapping(address => mapping(address => uint256)) public tokenBySender;
+
+    // function ownerOfTokens(address _userAddress) public view returns (uint256) {
+    //     uint256 tokenID = _tokenIdByOwner[_userAddress];
+    //     return tokenID;
+    // }
+
+    // function tokenBysenderAdd(address _from, address _reciever)
+    //     public
+    //     view
+    //     returns (uint256)
+    // {
+    //     uint256 tokenID = tokenBySender[_from][_reciever];
+    //     return tokenID;
+    // }
+
+    
+    // function createCertificate(string memory _tokenURI)
+    //     public
+    //     onlyOwner
+    //     returns (uint256 newTokenId)
+    // {
+    //     tokenCounter = tokenCounter + 1;
+    //     _safeMint(msg.sender, tokenCounter);
+    //     _setTokenURI(tokenCounter, _tokenURI);
+    //     return tokenCounter;
+    // }
 }

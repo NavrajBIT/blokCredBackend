@@ -21,10 +21,13 @@ bytecode = contract_json["bytecode"]
 # w3 = Web3(Web3.HTTPProvider("https://polygon-mumbai.g.alchemy.com/v2/CNCI8Fo64T3PScr0dquiyuZr0w1vzvGU"))
 # w3 = Web3(Web3.HTTPProvider("https://polygon-mainnet.g.alchemy.com/v2/4H5vwII7kCyZ4CabkkYlwtRiagTT-ZOG"))
 # w3 = Web3(Web3.HTTPProvider("https://polygon-rpc.com"))
-w3 = Web3(Web3.HTTPProvider("HTTP://127.0.0.1:8545"))
+w3 = Web3(Web3.HTTPProvider("https://polygon-mumbai.g.alchemy.com/v2/grUWncEJ7W6uEsFhwdjcdVzDJPktAulv"))
+
+# w3 = Web3(Web3.HTTPProvider("HTTP://127.0.0.1:8545"))
 w3.eth.defaultAccount = public_key
 w3.middleware_onion.inject(geth_poa_middleware, layer=0)
 myContract = w3.eth.contract(address=contract_address, abi=abi)
+
 
 
 def deploy_contract(name):
@@ -50,7 +53,7 @@ def create_certificate(account, metadata, contract_address):
     my_contract = w3.eth.contract(address=contract_address, abi=abi)
     nonce = w3.eth.get_transaction_count(public_key)
     createCertificate_tx = my_contract.functions.createCertificate(
-        metadata, account
+        metadata,account
     ).build_transaction(
         {
             "from": public_key,
@@ -65,6 +68,25 @@ def create_certificate(account, metadata, contract_address):
     receipt = w3.eth.wait_for_transaction_receipt(tx_data)
     token_id = my_contract.functions.tokenCounter().call()
     print(token_id)
+    return tx_data.hex()
+
+def update_certificate( metadata, contract_address, token_id):
+    my_contract = w3.eth.contract(address=contract_address, abi=abi)
+    nonce = w3.eth.get_transaction_count(public_key)
+    updateCertificate_tx = my_contract.functions.updateCertMetadata(
+      token_id, metadata,
+    ).build_transaction(
+        {
+            "from": public_key,
+            "nonce": nonce,
+            "gasPrice": w3.eth.gas_price,
+        }
+    )
+    signed_transaction = w3.eth.account.sign_transaction(
+        updateCertificate_tx, private_key=private_key
+    )
+    tx_data = w3.eth.send_raw_transaction(signed_transaction.rawTransaction)
+    receipt = w3.eth.wait_for_transaction_receipt(tx_data)
     return tx_data.hex()
 
 

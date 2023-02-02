@@ -58,6 +58,22 @@ def get_metadata_url(asset_name, asset_description, image):
     metadata_url = upload_metadata(metadata_filepath)
     return metadata_url
 
+def get_metadata_url_dnft(nameOfOrg,image,issue_date_nft,membership,expiry_date_memberShip='N/A',rewards=[]):
+    image_url = upload_image(image)
+    metadata = {
+        "name": nameOfOrg,
+        "image": image_url,
+        "issue_date_nft": str(issue_date_nft),
+        "membership": membership,
+        "expiry_date_memberShip": expiry_date_memberShip,
+        "rewards":rewards,
+    }
+    metadata_filepath = os.path.join(FILE_ROOT, "metadata.json")
+    with open(metadata_filepath, "w") as metadata_file:
+        json.dump(metadata, metadata_file)
+    metadata_url = upload_metadata(metadata_filepath)
+    return metadata_url
+
 
 def get_all_nfts(account):
     url = (
