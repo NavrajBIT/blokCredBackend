@@ -29,6 +29,8 @@ import os
 
 from web3 import Web3
 from web3.middleware import geth_poa_middleware
+from moralis import evm_api
+import requests
 
 BASE_DIR = settings.BASE_DIR
 BASE_URL = "http://localhost:8000"
@@ -95,10 +97,15 @@ user_self_keys = [
     "website",
     "email",
     "contact",
+    "city",
+    "state",
+    "country",
+    "category",
     "regId",
     "idProof",
     "total_certificates",
     "total_souvenirs",
+    "total_loyalty_nfts",
     "frames",
     "certificates",
     "storage_used",
@@ -214,16 +221,19 @@ def save_certificate_templates(user, request):
 def kpi(request):
     certificates = 0
     souvenirs = 0
+    loyalty_nfts = 0
     users = User.objects.all()
     for user in users:
         certificates = certificates + user.total_certificates
         souvenirs = souvenirs + user.total_souvenirs
+        loyalty_nfts = loyalty_nfts + user.total_loyalty_nfts
     return Response(
         {
             "status": "Success",
-            "response": {"certificates": certificates, "souvenirs": souvenirs},
+            "response": {"certificates": certificates, "souvenirs": souvenirs,"total_loyalty_nfts": loyalty_nfts}
         }
     )
+    
 
 
 @api_view(["POST", "GET"])
@@ -700,119 +710,182 @@ def verify_cert(request):
 @api_view(["POST", "GET"])
 def mint_reward_nft(request):
     account = Web3.toChecksumAddress(request.data["account"])
-    nameOfOrg= request.data["nameOfOrg"]
+    receiver = Web3.toChecksumAddress(request.data["receiver"])
     image = request.data["image"]
-    isMembership = request.data["isMembership"]
-    membership = request.data["membership"]
-    issue_date_nft = date.today()
-    isReward= request.data["isReward"]
-    reward= request.data["reward"]
-    issue_date_reward= str(date.today())
-    expiray_date_of_reward= request.data["expiray_date_of_reward"]
-    expiry_date_of_membership = request.data["expiry_date_of_membership"]
-    print("isMembership",isMembership)
-    print("isReward",isReward)
- 
-
+    user= User.objects.get(account=account)
+    image_size = image.size/ 1024/ 1024
+    if True:
+        nameOfOrg= request.data["nameOfOrg"]
+        isMembership = request.data["isMembership"]
+        membership = request.data["membership"]
+        issue_date_nft = date.today()
+        isReward= request.data["isReward"]
+        reward= request.data["reward"]
+        issue_date_reward= str(date.today())
+        expiray_date_of_reward= request.data["expiray_date_of_reward"]
+        expiry_date_of_membership = request.data["expiry_date_of_membership"]
+        print("isMembership",isMembership)
+        print("isReward",isReward)
     
-    try:
-        
-        if isMembership == "true" and isReward== 'true':
-            print("isMembership and isReward......")
-            contract_address = config['contract_address']
-            print("contract_address",contract_address)
-            metadata_url = get_metadata_url_dnft(
-                nameOfOrg=nameOfOrg,
-                image=image,
-                issue_date_nft=issue_date_nft,
-                membership=membership,
-                expiry_date_memberShip=expiry_date_of_membership,
-                rewards=[{"reward":reward,"issue_date_reward":issue_date_reward,"expiry_date_reward":expiray_date_of_reward,'is_claimed':False,}]
-            )
-            print("metadata_url",metadata_url)
 
-            tx_hash = create_certificate(
-                account=account,
-                metadata=metadata_url,
-                contract_address=contract_address
-            )
+        
+        try:
             
+            if isMembership == "true" and isReward== 'true':
+                print("isMembership and isReward......")
+                contract_address = config['contract_address']
+                print("contract_address",contract_address)
+                metadata_url = get_metadata_url_dnft(
+                    nameOfOrg=nameOfOrg,
+                    image=image,
+                    issue_date_nft=issue_date_nft,
+                    membership=membership,
+                    expiry_date_memberShip=expiry_date_of_membership,
+                    rewards=[{"reward":reward,"issue_date_reward":issue_date_reward,"expiry_date_reward":expiray_date_of_reward,'is_claimed':False,}]
+                )
+                print("metadata_url",metadata_url)
+                tx_hash = create_certificate(
+                    account=receiver,
+                    metadata=metadata_url,
+                    contract_address=contract_address
+                )
+                
+                # return Response({"status": "Success", "response": tx_hash})
+            elif isMembership == 'true':
+                print("isMembership......")
+                contract_address = config['contract_address']
+                metadata_url = get_metadata_url_dnft(
+                    nameOfOrg=nameOfOrg,
+                    image=image,
+                    issue_date_nft=issue_date_nft,
+                    membership=membership,
+                    expiry_date_memberShip=expiry_date_of_membership,
+                )
+                print("metadata_url",metadata_url)
+                tx_hash = create_certificate(
+                    account=receiver,
+                    metadata=metadata_url,
+                    contract_address=contract_address,
+                )
+                
+                # return Response({"status": "Success", "response": tx_hash})
+            elif isReward == 'true':
+                print("isReward......")
+                contract_address = config['contract_address']
+                metadata_url = get_metadata_url_dnft(
+                    nameOfOrg=nameOfOrg,
+                    image=image,
+                    membership=membership,
+                    issue_date_nft=issue_date_nft,
+                    rewards=[{"reward":reward,"issue_date_reward":issue_date_reward,"expiry_date_reward":expiray_date_of_reward,'is_claimed':False,}],
+                )
+                print("metadata_url",metadata_url)
+                tx_hash = create_certificate(
+                    account=receiver,
+                    metadata=metadata_url,
+                    contract_address=contract_address,
+                )
+                
+                # return Response({"status": "Success", "response": tx_hash})
+            else:
+                print("else......")
+                contract_address = config['contract_address']
+                metadata_url = get_metadata_url_dnft(
+                    nameOfOrg=nameOfOrg,
+                    image=image,
+                    membership=membership,
+                    issue_date_nft=issue_date_nft,
+                )
+                print("metadata_url",metadata_url)
+                tx_hash = create_certificate(
+                    account=receiver,
+                    metadata=metadata_url,
+                    contract_address=contract_address,
+                )
+                
+                # return Response({"status": "Success", "response": tx_hash})
+            user.total_loyalty_nfts += 1
+            user.save()
             return Response({"status": "Success", "response": tx_hash})
-        elif isMembership == 'true':
-            print("isMembership......")
-            contract_address = config['contract_address']
-            metadata_url = get_metadata_url_dnft(
-                nameOfOrg=nameOfOrg,
-                image=image,
-                issue_date_nft=issue_date_nft,
-                membership=membership,
-                expiry_date_memberShip=expiry_date_of_membership,
-            )
-            print("metadata_url",metadata_url)
-            tx_hash = create_certificate(
-                account=account,
-                metadata=metadata_url,
-                contract_address=contract_address,
-            )
             
-            return Response({"status": "Success", "response": tx_hash})
-        elif isReward == 'true':
-            print("isReward......")
-            contract_address = config['contract_address']
-            metadata_url = get_metadata_url_dnft(
-                nameOfOrg=nameOfOrg,
-                image=image,
-                membership=membership,
-                issue_date_nft=issue_date_nft,
-                rewards=[{"reward":reward,"issue_date_reward":issue_date_reward,"expiry_date_reward":expiray_date_of_reward,'is_claimed':False,}],
-            )
-            print("metadata_url",metadata_url)
-            tx_hash = create_certificate(
-                account=account,
-                metadata=metadata_url,
-                contract_address=contract_address,
-            )
-            
-            return Response({"status": "Success", "response": tx_hash})
-        else:
-            print("else......")
-            contract_address = config['contract_address']
-            metadata_url = get_metadata_url_dnft(
-                nameOfOrg=nameOfOrg,
-                image=image,
-                membership=membership,
-                issue_date_nft=issue_date_nft,
-            )
-            print("metadata_url",metadata_url)
-            tx_hash = create_certificate(
-                account=account,
-                metadata=metadata_url,
-                contract_address=contract_address,
-            )
-            
-            return Response({"status": "Success", "response": tx_hash})
-    except Exception as e:
-        print(e)
-        return Response({"status": "Failure", "response": "Invalid data."})
+        except Exception as e:
+            print(e)
+            return Response({"status": "Failure", "response": "Invalid data."})
+    else:
+        return Response({"status": "Failure", "response": "Storage limit exceeded."})
     
 @api_view(["POST", "GET"])
 def view_dnft_reward(request):
     account = Web3.toChecksumAddress(request.data["account"])
-    url=f"https://polygon-mumbai.g.alchemy.com/v2/grUWncEJ7W6uEsFhwdjcdVzDJPktAulv/getNFTs?owner={account}&contractAddresses%5B%5D={'0x751554101A9300A2b6fC6f857aEe71E2b52B522C'}"
+    print(account)
+    print("started...")
+    url=f"https://polygon-mumbai.g.alchemy.com/v2/grUWncEJ7W6uEsFhwdjcdVzDJPktAulv/getNFTs?owner={account}&contractAddresses%5B%5D={'0x751554101A9300A2b6fC6f857aEe71E2b52B522C'}&refreshCache=true"
     data = requests.get(url).json()
-    data=data['ownedNfts']
-    data_lst=[]
-    for nft in data:
-        if nft['title'] =='XYZ':
-            token_id = int(nft['id']['tokenId'],0)
-            uri = myContract.functions.tokenURI(token_id).call()
-            uri_data= requests.get(uri).json()
-            data_lst.append({
-                'Token_id':token_id,
-                "metadata":uri_data
-            })
+    # data=data['ownedNfts']
+    # print("data")
+    
+    
+    # data_lst=[]
+    # for nft in data:
+    #     if nft['title'] == 'XYZ':
+    #         token_id = int(nft['id']['tokenId'],0)
+    #         print("token_id",token_id)
+    #         # uri = myContract.functions.tokenURI(token_id).call()
+    #         # print("uri",uri)
+    #         # uri_data= requests.get(uri).json()
+    #         uri_data= nft['metadata']
+    #         data_lst.append({
+    #             'Token_id':token_id,
+    #             "metadata":uri_data
+    #         })
+    #         print("Data Append")
+            
+    
+    
+    # api_key = "LVcjaULlI7MJPs7hoScwOKRl1NDoFYs2GEptyRE8Dr52oMAQ9AzN0kzqSHJmFkUF"
+    # params = {
+    #         "address": "0xAF4fa01F430eC2297385Ff0D776C58F492BD8FC2",
+    #         "chain": "mumbai",
+    #         "format": "decimal",
+    #         "limit": 0,
+    #         "token_addresses": [],
+    #         "cursor": "",
+    #         "normalizeMetadata": True,
+    #     }
+    # result = evm_api.nft.get_wallet_nfts(
+    #         api_key=api_key,
+    #         params=params,
+    #     )
+    
+    # headers = {
+    #     'accept': 'application/json',
+    #     'X-API-Key': 'LVcjaULlI7MJPs7hoScwOKRl1NDoFYs2GEptyRE8Dr52oMAQ9AzN0kzqSHJmFkUF',
+    # }
+    # params = {
+    #     'chain': 'mumbai',
+    #     'format': 'decimal',
+    #     'disable_total': 'true',
+    #     'normalizeMetadata': 'true',
+    # }
+    # response = requests.get(
+    #     f'https://deep-index.moralis.io/api/v2/{account}/nft',
+    #     params=params,
+    #     headers=headers,
+    # )
+    
+    # url = "https://polygon-mumbai.g.alchemy.com/nft/v2/grUWncEJ7W6uEsFhwdjcdVzDJPktAulv/getNFTs?owner=0xAF4fa01F430eC2297385Ff0D776C58F492BD8FC2&refreshCache=True"
+    # url ="https://polygon-mumbai.g.alchemy.com/nft/v2/grUWncEJ7W6uEsFhwdjcdVzDJPktAulv/getNFTs?owner=0xAF4fa01F430eC2297385Ff0D776C58F492BD8FC2&pageSize=100&contractAddresses[]=0x751554101A9300A2b6fC6f857aEe71E2b52B522C&withMetadata=true"
+    # url = "https://alchemy-sdk-core-example.com/grUWncEJ7W6uEsFhwdjcdVzDJPktAulv/getNftsForOwner?owner=0xAF4fa01F430eC2297385Ff0D776C58F492BD8FC2&omitMetadata=false"
+    # headers = {"accept": "application/json"}
+    # response = requests.get(url, headers=headers)
+    # print(response)
+    # data=response.json()
+   
+    
+    return Response({"status": "Success", "response": data})
+    
+    
         
-    return Response({"status": "Success", "response": data_lst})
     
     
     
