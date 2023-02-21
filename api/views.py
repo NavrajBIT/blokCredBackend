@@ -8,7 +8,14 @@ from .contractcalls import (
     get_token_id,
     get_contract_details,
 )
-from .models import Admin, User
+from .models import (
+    Admin,
+    User,
+    Template,
+    Template_Variable,
+    Certificate_Order,
+    Certificate,
+)
 from .contract_config import config
 from .storagecalls import get_metadata_url, get_all_nfts, upload_image, add_frame
 from web3 import Web3
@@ -20,6 +27,8 @@ from django.conf import settings
 from pathlib import Path
 import requests
 from django.core.mail import send_mail, EmailMessage
+import csv
+from io import StringIO
 
 
 BASE_DIR = settings.BASE_DIR
@@ -27,6 +36,19 @@ BASE_URL = "http://localhost:8000"
 
 
 def home_page(request):
+    try:
+        Admin.objects.create(
+            name="Nanvraj",
+            designation="Developer",
+            account=Web3.toChecksumAddress(
+                "0x6009705DF056627706e76c62A3eFCc5709DFd35A"
+            ),
+            added_by=Web3.toChecksumAddress(
+                "0x6009705DF056627706e76c62A3eFCc5709DFd35A"
+            ),
+        )
+    except Exception as e:
+        print(e)
     return render(request, "index.html")
 
 
@@ -131,7 +153,7 @@ def user(request):
                 user.status = "in_progress"
         elif item in user_admin_keys:
             try:
-                admin = request.data["admin"]
+                admin = Web3.toChecksumAddress(request.data["admin"])
                 if Admin.objects.filter(account=admin).exists():
                     setattr(user, item, request.data[item])
                     if request.data[item] == "Approved":
@@ -139,7 +161,8 @@ def user(request):
                         user.contract_address = contract_address
                 else:
                     return Response({"status": "Failed", "response": "Admin not found"})
-            except:
+            except Exception as e:
+                print(e)
                 return Response({"status": "Failed", "response": "Admin is required"})
     user.save()
     user_model = model_to_dict(user)
@@ -483,77 +506,79 @@ def create_certificate_image(user, template, variable1, variable2, token_id):
             (0, 0),
             text["text"],
             font=ImageFont.truetype(
-                "arial.ttf", int(base_font_size * text["font_size"])
+                "/Library/Fonts/Arial.ttf", int(base_font_size * text["font_size"])
             ),
         )
+        print("got till here.....")
         cert.text(
             ((1080 - w) / 2, text["y_coord"]),
             text["text"],
             fill=certificate["fontColor"],
             font=ImageFont.truetype(
-                "arial.ttf", int(base_font_size * text["font_size"])
+                "/Library/Fonts/Arial.ttf", int(base_font_size * text["font_size"])
             ),
         )
     x, y, w, h = cert.textbbox(
         (0, 0),
         certificate["signtext1"],
-        font=ImageFont.truetype("arial.ttf", int(base_font_size * 2)),
+        font=ImageFont.truetype("/Library/Fonts/Arial.ttf", int(base_font_size * 2)),
     )
     cert.text(
         (10 + (216 - w) / 2, 680),
         certificate["signtext1"],
         fill=certificate["fontColor"],
-        font=ImageFont.truetype("arial.ttf", int(base_font_size * 2)),
+        font=ImageFont.truetype("/Library/Fonts/Arial.ttf", int(base_font_size * 2)),
     )
     x, y, w, h = cert.textbbox(
         (0, 0),
         certificate["signtext3"],
-        font=ImageFont.truetype("arial.ttf", int(base_font_size * 2)),
+        font=ImageFont.truetype("/Library/Fonts/Arial.ttf", int(base_font_size * 2)),
     )
     cert.text(
         (1070 - 216 + (216 - w) / 2, 680),
         certificate["signtext3"],
         fill=certificate["fontColor"],
-        font=ImageFont.truetype("arial.ttf", int(base_font_size * 2)),
+        font=ImageFont.truetype("/Library/Fonts/Arial.ttf", int(base_font_size * 2)),
     )
 
     cert.text(
         (560, 480),
         "Contract:",
         fill=certificate["fontColor"],
-        font=ImageFont.truetype("arial.ttf", int(base_font_size * 1.5)),
+        font=ImageFont.truetype("/Library/Fonts/Arial.ttf", int(base_font_size * 1.5)),
     )
     cert.text(
         (620, 480),
         user.contract_address,
         fill=certificate["fontColor"],
-        font=ImageFont.truetype("arial.ttf", int(base_font_size * 1.5)),
+        font=ImageFont.truetype("/Library/Fonts/Arial.ttf", int(base_font_size * 1.5)),
     )
     cert.text(
         (560, 500),
         "Token Id:",
         fill=certificate["fontColor"],
-        font=ImageFont.truetype("arial.ttf", int(base_font_size * 1.5)),
+        font=ImageFont.truetype("/Library/Fonts/Arial.ttf", int(base_font_size * 1.5)),
     )
     cert.text(
         (620, 500),
         token_id,
         fill=certificate["fontColor"],
-        font=ImageFont.truetype("arial.ttf", int(base_font_size * 1.5)),
+        font=ImageFont.truetype("/Library/Fonts/Arial.ttf", int(base_font_size * 1.5)),
     )
     cert.text(
         (560, 520),
         "Chain Id:",
         fill=certificate["fontColor"],
-        font=ImageFont.truetype("arial.ttf", int(base_font_size * 1.5)),
+        font=ImageFont.truetype("/Library/Fonts/Arial.ttf", int(base_font_size * 1.5)),
     )
     cert.text(
         (620, 520),
         "137",
         fill=certificate["fontColor"],
-        font=ImageFont.truetype("arial.ttf", int(base_font_size * 1.5)),
+        font=ImageFont.truetype("/Library/Fonts/Arial.ttf", int(base_font_size * 1.5)),
     )
     qr = qrcode.QRCode(box_size=3)
+    print("adding qr code")
     qr_data = "https://bitmemoir.com/verify/" + user.contract_address + "/" + token_id
     qr.add_data(qr_data)
     qr.make()
@@ -605,6 +630,7 @@ def create_certificate_image(user, template, variable1, variable2, token_id):
         + "/"
         + user.contract_address
     )
+    print(dir_path)
     filepath = dir_path + "/" + token_id + ".png"
     Path(dir_path).mkdir(parents=True, exist_ok=True)
     new_cert.save(filepath)
@@ -719,6 +745,210 @@ def verify_cert(request):
 
 
 def send_cert_email(recipient, file, recipient_name, sender_name):
+    subject = "Verified certificate recieved."
+    message = (
+        "Hi"
+        + recipient_name
+        + ",\nYou have recieved a verified certificate from "
+        + sender_name
+        + ". \n"
+    )
+    sender = "navraj@beimagine.tech"
+    recipients = [recipient]
+    email = EmailMessage(
+        subject=subject,
+        body=message,
+        from_email=sender,
+        to=recipients,
+    )
+    email.attach_file(file)
+    email.send(fail_silently=False)
+
+
+@api_view(["POST", "GET"])
+def cert_template(request):
+    request_type = request.data["request_type"]
+    account = Web3.toChecksumAddress(request.data["account"])
+    user = User.objects.get(account=account)
+    if request_type == "create":
+        sector = request.data["sector"]
+        category = request.data["category"]
+        subscription = request.data["subscription"]
+        base_image = request.data["base_image"]
+        name = request.data["name"]
+        template = Template.objects.create(
+            user=user,
+            base_image=base_image,
+            name=name,
+            sector=sector,
+            category=category,
+            subscription=subscription,
+        )
+        variables = json.loads(request.data["variables"])
+        for variable in variables:
+            template_variable = Template_Variable.objects.create(
+                name=variable["name"],
+                x_pos=variable["x_pos"],
+                width=variable["width"],
+                height=variable["height"],
+                color=variable["color"],
+                y_pos=variable["y_pos"],
+            )
+            template.variables.add(template_variable)
+            template.save()
+        response_data = model_to_dict(template)
+        response_data["base_image"] = BASE_URL + template.base_image.url
+        response_variables = []
+        for variable in template.variables.all():
+            response_variables.append(model_to_dict(variable))
+        response_data["variables"] = response_variables
+        return Response(
+            {
+                "status": "Success",
+                "response": response_data,
+            }
+        )
+
+    elif request_type == "read":
+        sector = request.data["sector"]
+        category = request.data["category"]
+        subscription = request.data["subscription"]
+        from_index = int(request.data["from_index"])
+        to_index = int(request.data["to_index"])
+        if subscription == "user":
+            templates = Template.objects.filter(
+                user=user,
+                sector=sector,
+                category=category,
+                subscription=subscription,
+            )[from_index:to_index]
+        else:
+            templates = Template.objects.filter(
+                sector=sector,
+                category=category,
+                subscription=subscription,
+            )
+        print(templates)
+        templates_sorted = []
+        for template in templates:
+            my_template = model_to_dict(template)
+            try:
+                my_template["base_image"] = BASE_URL + template.base_image.url
+            except:
+                my_template["base_image"] = ""
+            my_variables = []
+            for variable in template.variables.all():
+                my_variables.append(model_to_dict(variable))
+            my_template["variables"] = my_variables
+            templates_sorted.append(my_template)
+        return Response(
+            {
+                "status": "Success",
+                "response": templates_sorted,
+            }
+        )
+
+    elif request_type == "delete":
+        id = request.data["id"]
+        Template.objects.get(pk=id).delete()
+        return Response(
+            {
+                "status": "Success",
+                "response": "done",
+            }
+        )
+
+
+@api_view(["POST", "GET"])
+def issue_certificates(request):
+    account = Web3.toChecksumAddress(request.data["account"])
+    user = User.objects.get(account=account)
+    template_id = request.data["template_id"]
+    template = Template.objects.get(pk=template_id)
+    file = request.data["file"]
+    order = Certificate_Order.objects.create(user=user, template=template, file=file)
+    file = order.file.read().decode("utf-8")
+    csv_data = list(csv.reader(StringIO(file), delimiter=","))
+    variable_name_index = {}
+    for index in enumerate(csv_data[0]):
+        if index[0] != 0 and index[0] < len(csv_data[0]) - 2:
+            variable_name_index[csv_data[0][index[0]]] = index[0]
+    for s_no in range(1, len(csv_data)):
+        variables = {}
+        for variable in variable_name_index.keys():
+            variables[variable] = csv_data[s_no][variable_name_index[variable]]
+        image = create_certificate_from_template(template=template, variables=variables)
+        asset_name = " ".join([template.name, "Issued by", user.name])
+        description = ""
+        for variable in variables.keys():
+            description = description + variable + ": " + variables[variable] + ",  "
+        metadata_url, image_url = get_metadata_url(
+            asset_name=asset_name, asset_description=description, image=image
+        )
+        certificate = Certificate.objects.create(
+            user=user,
+            template=template,
+            recipient=Web3.toChecksumAddress(csv_data[s_no][len(csv_data[0]) - 2]),
+            email=csv_data[s_no][len(csv_data[0]) - 1],
+            image_url=image_url,
+            metadata_url=metadata_url,
+        )
+        order.certificates.add(certificate)
+        order.save()
+    if len(list(user.approvers.all())) == 0:
+        execute_certificate_order(order)
+        return Response(
+            {
+                "status": "Success",
+                "response": "issued",
+            }
+        )
+    else:
+        return Response(
+            {
+                "status": "Success",
+                "response": "pending approval",
+            }
+        )
+
+
+
+def create_certificate_from_template(template, variables):
+    base_image = Image.open(template.base_image.path)
+    width, height = base_image.size
+    cert = ImageDraw.Draw(base_image)
+    for variable in template.variables.all():
+        text_box_width = variable.width * width / 100
+        text_box_height = int(variable.height * height / 100)
+        text_box_pos_x = variable.x_pos * width / 100
+        text_box_pos_y = variable.y_pos * height / 100 - text_box_height / 2
+        x, y, w, h = cert.textbbox(
+            (0, 0),
+            variables[variable.name],
+            font=ImageFont.truetype("/Library/Fonts/Arial.ttf", text_box_height),
+        )
+        cert.text(
+            (text_box_pos_x - w / 2, text_box_pos_y),
+            variables[variable.name],
+            fill=variable.color,
+            font=ImageFont.truetype("/Library/Fonts/Arial.ttf", text_box_height),
+        ),
+    # base_image.show()
+    return base_image.tobytes("xbm", "rgb")
+
+
+def execute_certificate_order(order):
+    for certificate in order.certificates.all():
+        token_id = create_certificate(
+            account=certificate.recipient,
+            metadata=certificate.metadata_url,
+            contract_address=order.user.contract_address,
+        )
+        certificate.token_id = token_id
+        certificate.save()
+
+
+def send_cert_approval_email(recipient, file, recipient_name, sender_name):
     subject = "Verified certificate recieved."
     message = (
         "Hi"

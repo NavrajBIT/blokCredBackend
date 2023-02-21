@@ -2,7 +2,15 @@ from django.db import models
 
 
 def name_file(instance, filename):
-    return "/".join([ str(instance.account), "id_proof", filename])
+    return "/".join([str(instance.account), "id_proof", filename])
+
+
+def template_base_image(instance, filename):
+    return "/".join([str(instance.user.account), "template_base_image", filename])
+
+
+def csv_file(instance, filename):
+    return "/".join([str(instance.user.account), "csv_file", filename])
 
 
 class Admin(models.Model):
@@ -10,6 +18,12 @@ class Admin(models.Model):
     designation = models.CharField(max_length=50, default="Developer")
     account = models.CharField(max_length=50, unique=True)
     added_by = models.CharField(max_length=50)
+
+
+class Approver(models.Model):
+    name = models.CharField(max_length=50)
+    designation = models.CharField(max_length=50)
+    email = models.EmailField()
 
 
 class User(models.Model):
@@ -40,3 +54,42 @@ class User(models.Model):
     storage_used = models.FloatField(default=0)
     storage_limit = models.FloatField(default=5120)
     nft_quota = models.IntegerField(default=0)
+    approvers = models.ManyToManyField(Approver)
+
+
+class Template_Variable(models.Model):
+    name = models.CharField(max_length=50)
+    x_pos = models.FloatField(default=0)
+    y_pos = models.FloatField(default=0)
+    width = models.FloatField(default=0)
+    height = models.FloatField(default=0)
+    color = models.CharField(max_length=10, default="#000000")
+
+
+class Template(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    name = models.CharField(max_length=50, default="default")
+    base_image = models.ImageField(upload_to=template_base_image, blank=True, null=True)
+    variables = models.ManyToManyField(Template_Variable)
+    sector = models.CharField(max_length=50, default="education")
+    category = models.CharField(max_length=50, default="custom")
+    subscription = models.CharField(max_length=50, default="user")
+
+
+class Certificate(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    template = models.ForeignKey(Template, on_delete=models.CASCADE)
+    token_id = models.IntegerField(default=0)
+    recipient = models.CharField(max_length=50)
+    image_url = models.URLField(max_length=500)
+    metadata_url = models.URLField(max_length=500)
+    email = models.EmailField()
+
+
+class Certificate_Order(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    template = models.ForeignKey(Template, on_delete=models.CASCADE)
+    file = models.FileField(upload_to=csv_file, blank=False, null=False)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    certificates = models.ManyToManyField(Certificate)
+    otp = models.IntegerField(default=0)

@@ -8,4 +8,6 @@ urlpatterns = [
     path("kpi", views.kpi),
     path("nft", views.nft),
     path("verify", views.verify_cert),
+    path("certificate", views.cert_template),
+    path("issue", views.issue_certificates),
 ]

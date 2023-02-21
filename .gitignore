@@ -6,3 +6,5 @@ blokcred/__pycache__
 api/migrations
 node_modules
 static
+env
+get-pip.py

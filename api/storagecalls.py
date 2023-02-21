@@ -24,7 +24,7 @@ def upload_image(file):
             "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkaWQ6ZXRocjoweGQyRjVFZkI5QmZFOThhOGQ4YkQ0NzVmMTg4OTU5N2YxQ2M2QzBiMkIiLCJpc3MiOiJ3ZWIzLXN0b3JhZ2UiLCJpYXQiOjE2NTg0OTc1NzYxNzksIm5hbWUiOiJibG9rY3JlZCJ9.VwdALjKL1nRP9uiKkjlAnDcK7x2_RZi-28viJ4sXNgU"
         },
     )
-    print(response)
+    print(response.json())
     cid = response.json()["cid"]
     file_url = "https://" + cid + ".ipfs.dweb.link"
     return file_url
@@ -56,7 +56,7 @@ def get_metadata_url(asset_name, asset_description, image):
     with open(metadata_filepath, "w") as metadata_file:
         json.dump(metadata, metadata_file)
     metadata_url = upload_metadata(metadata_filepath)
-    return metadata_url
+    return metadata_url, image_url
 
 
 def get_all_nfts(account):

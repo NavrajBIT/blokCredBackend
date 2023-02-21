@@ -24,7 +24,7 @@ bytecode = contract_json["bytecode"]
 w3 = Web3(Web3.HTTPProvider("HTTP://127.0.0.1:8545"))
 w3.eth.defaultAccount = public_key
 w3.middleware_onion.inject(geth_poa_middleware, layer=0)
-myContract = w3.eth.contract(address=contract_address, abi=abi)
+# myContract = w3.eth.contract(address=contract_address, abi=abi)
 
 
 def deploy_contract(name):
@@ -65,7 +65,7 @@ def create_certificate(account, metadata, contract_address):
     receipt = w3.eth.wait_for_transaction_receipt(tx_data)
     token_id = my_contract.functions.tokenCounter().call()
     print(token_id)
-    return tx_data.hex()
+    return token_id
 
 
 def get_token_id(contract_address):
