@@ -92,4 +92,10 @@ class Certificate_Order(models.Model):
     file = models.FileField(upload_to=csv_file, blank=False, null=False)
     timestamp = models.DateTimeField(auto_now_add=True)
     certificates = models.ManyToManyField(Certificate)
-    otp = models.IntegerField(default=0)
+    fulfilled = models.BooleanField(default=False)
+    
+class Approval_OTP(models.Model):
+    approver = models.ForeignKey(Approver, on_delete=models.CASCADE)
+    order = models.ForeignKey(Certificate_Order, on_delete=models.CASCADE)
+    otp = models.IntegerField()
+    approved = models.BooleanField(default=False)

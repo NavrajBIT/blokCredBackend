@@ -7,6 +7,7 @@ from .contractcalls import (
     deploy_contract,
     get_token_id,
     get_contract_details,
+    check_payment
 )
 from .models import (
     Admin,
@@ -15,6 +16,8 @@ from .models import (
     Template_Variable,
     Certificate_Order,
     Certificate,
+    Approver,
+    Approval_OTP,
 )
 from .contract_config import config
 from .storagecalls import get_metadata_url, get_all_nfts, upload_image, add_frame
@@ -29,6 +32,7 @@ import requests
 from django.core.mail import send_mail, EmailMessage
 import csv
 from io import StringIO
+import random
 
 
 BASE_DIR = settings.BASE_DIR
@@ -38,13 +42,13 @@ BASE_URL = "http://localhost:8000"
 def home_page(request):
     try:
         Admin.objects.create(
-            name="Nanvraj",
+            name="Navraj",
             designation="Developer",
             account=Web3.toChecksumAddress(
-                "0x6009705DF056627706e76c62A3eFCc5709DFd35A"
+                "0xE858f0370b101cD3F58E03F18BFA1240a591b5Fa"
             ),
             added_by=Web3.toChecksumAddress(
-                "0x6009705DF056627706e76c62A3eFCc5709DFd35A"
+                "0xE858f0370b101cD3F58E03F18BFA1240a591b5Fa"
             ),
         )
     except Exception as e:
@@ -96,6 +100,7 @@ user_self_keys = [
     "frames",
     "certificates",
     "storage_used",
+    "approvers",
 ]
 user_admin_keys = [
     "comment",
@@ -123,6 +128,10 @@ def user(request):
                     user_model["idProof"] = BASE_URL + user_model["idProof"].url
                 except:
                     user_model["idProof"] = ""
+                approvers = []
+                for approver in user.approvers.all():
+                    approvers.append(model_to_dict(approver))
+                user_model["approvers"] = approvers
                 all_users_sorted.append(user_model)
             return Response({"status": "Success", "response": all_users_sorted})
         else:
@@ -147,6 +156,16 @@ def user(request):
                     print(user.frames)
             elif item == "certificates":
                 save_certificate_templates(user, request)
+            elif item == "approvers":
+                user.approvers.clear()
+                approvers = json.loads(request.data["approvers"])
+                for approver in approvers:
+                    new_approver = Approver.objects.create(
+                        name=approver["name"],
+                        designation=approver["designation"],
+                        email=approver["email"],
+                    )
+                    user.approvers.add(new_approver)
             else:
                 setattr(user, item, request.data[item])
             if item == "regId":
@@ -170,6 +189,10 @@ def user(request):
         user_model["idProof"] = BASE_URL + user_model["idProof"].url
     except:
         user_model["idProof"] = ""
+    approvers = []
+    for approver in user.approvers.all():
+        approvers.append(model_to_dict(approver))
+    user_model["approvers"] = approvers
     return Response({"status": "Success", "response": user_model})
 
 
@@ -506,7 +529,7 @@ def create_certificate_image(user, template, variable1, variable2, token_id):
             (0, 0),
             text["text"],
             font=ImageFont.truetype(
-                "/Library/Fonts/Arial.ttf", int(base_font_size * text["font_size"])
+                "arial.ttf", int(base_font_size * text["font_size"])
             ),
         )
         print("got till here.....")
@@ -515,67 +538,67 @@ def create_certificate_image(user, template, variable1, variable2, token_id):
             text["text"],
             fill=certificate["fontColor"],
             font=ImageFont.truetype(
-                "/Library/Fonts/Arial.ttf", int(base_font_size * text["font_size"])
+                "arial.ttf", int(base_font_size * text["font_size"])
             ),
         )
     x, y, w, h = cert.textbbox(
         (0, 0),
         certificate["signtext1"],
-        font=ImageFont.truetype("/Library/Fonts/Arial.ttf", int(base_font_size * 2)),
+        font=ImageFont.truetype("arial.ttf", int(base_font_size * 2)),
     )
     cert.text(
         (10 + (216 - w) / 2, 680),
         certificate["signtext1"],
         fill=certificate["fontColor"],
-        font=ImageFont.truetype("/Library/Fonts/Arial.ttf", int(base_font_size * 2)),
+        font=ImageFont.truetype("arial.ttf", int(base_font_size * 2)),
     )
     x, y, w, h = cert.textbbox(
         (0, 0),
         certificate["signtext3"],
-        font=ImageFont.truetype("/Library/Fonts/Arial.ttf", int(base_font_size * 2)),
+        font=ImageFont.truetype("arial.ttf", int(base_font_size * 2)),
     )
     cert.text(
         (1070 - 216 + (216 - w) / 2, 680),
         certificate["signtext3"],
         fill=certificate["fontColor"],
-        font=ImageFont.truetype("/Library/Fonts/Arial.ttf", int(base_font_size * 2)),
+        font=ImageFont.truetype("arial.ttf", int(base_font_size * 2)),
     )
 
     cert.text(
         (560, 480),
         "Contract:",
         fill=certificate["fontColor"],
-        font=ImageFont.truetype("/Library/Fonts/Arial.ttf", int(base_font_size * 1.5)),
+        font=ImageFont.truetype("arial.ttf", int(base_font_size * 1.5)),
     )
     cert.text(
         (620, 480),
         user.contract_address,
         fill=certificate["fontColor"],
-        font=ImageFont.truetype("/Library/Fonts/Arial.ttf", int(base_font_size * 1.5)),
+        font=ImageFont.truetype("arial.ttf", int(base_font_size * 1.5)),
     )
     cert.text(
         (560, 500),
         "Token Id:",
         fill=certificate["fontColor"],
-        font=ImageFont.truetype("/Library/Fonts/Arial.ttf", int(base_font_size * 1.5)),
+        font=ImageFont.truetype("arial.ttf", int(base_font_size * 1.5)),
     )
     cert.text(
         (620, 500),
         token_id,
         fill=certificate["fontColor"],
-        font=ImageFont.truetype("/Library/Fonts/Arial.ttf", int(base_font_size * 1.5)),
+        font=ImageFont.truetype("arial.ttf", int(base_font_size * 1.5)),
     )
     cert.text(
         (560, 520),
         "Chain Id:",
         fill=certificate["fontColor"],
-        font=ImageFont.truetype("/Library/Fonts/Arial.ttf", int(base_font_size * 1.5)),
+        font=ImageFont.truetype("arial.ttf", int(base_font_size * 1.5)),
     )
     cert.text(
         (620, 520),
         "137",
         fill=certificate["fontColor"],
-        font=ImageFont.truetype("/Library/Fonts/Arial.ttf", int(base_font_size * 1.5)),
+        font=ImageFont.truetype("arial.ttf", int(base_font_size * 1.5)),
     )
     qr = qrcode.QRCode(box_size=3)
     print("adding qr code")
@@ -816,10 +839,10 @@ def cert_template(request):
         from_index = int(request.data["from_index"])
         to_index = int(request.data["to_index"])
         if subscription == "user":
+            print(user, sector, category, subscription)
             templates = Template.objects.filter(
                 user=user,
                 sector=sector,
-                category=category,
                 subscription=subscription,
             )[from_index:to_index]
         else:
@@ -869,6 +892,17 @@ def issue_certificates(request):
     order = Certificate_Order.objects.create(user=user, template=template, file=file)
     file = order.file.read().decode("utf-8")
     csv_data = list(csv.reader(StringIO(file), delimiter=","))
+    cert_no = len(csv_data) - 1
+    if cert_no > user.nft_quota:
+        return Response(
+            {
+                "status": "Failed",
+                "response": "Not enough balance",
+            }
+        )
+    else:
+        user.nft_quota = user.nft_quota - cert_no
+        user.save()
     variable_name_index = {}
     for index in enumerate(csv_data[0]):
         if index[0] != 0 and index[0] < len(csv_data[0]) - 2:
@@ -904,13 +938,18 @@ def issue_certificates(request):
             }
         )
     else:
+        for approver in user.approvers.all():
+            otp = int(random.random() * 1000000)
+            approval = Approval_OTP.objects.create(
+                approver=approver, order=order, otp=otp
+            )
+            send_cert_approval_email(approval)
         return Response(
             {
                 "status": "Success",
                 "response": "pending approval",
             }
         )
-
 
 
 def create_certificate_from_template(template, variables):
@@ -925,13 +964,13 @@ def create_certificate_from_template(template, variables):
         x, y, w, h = cert.textbbox(
             (0, 0),
             variables[variable.name],
-            font=ImageFont.truetype("/Library/Fonts/Arial.ttf", text_box_height),
+            font=ImageFont.truetype("arial.ttf", text_box_height),
         )
         cert.text(
             (text_box_pos_x - w / 2, text_box_pos_y),
             variables[variable.name],
             fill=variable.color,
-            font=ImageFont.truetype("/Library/Fonts/Arial.ttf", text_box_height),
+            font=ImageFont.truetype("arial.ttf", text_box_height),
         ),
     # base_image.show()
     return base_image.tobytes("xbm", "rgb")
@@ -946,24 +985,98 @@ def execute_certificate_order(order):
         )
         certificate.token_id = token_id
         certificate.save()
+    order.fulfilled = True
+    order.save()
 
 
-def send_cert_approval_email(recipient, file, recipient_name, sender_name):
-    subject = "Verified certificate recieved."
-    message = (
-        "Hi"
-        + recipient_name
-        + ",\nYou have recieved a verified certificate from "
-        + sender_name
-        + ". \n"
+def send_cert_approval_email(approval):
+    subject = "Certificate issuance approval request."
+    greeting = "Hi " + approval.approver.name + ","
+    first_line = "Your approval is required for certificate issuance."
+    second_line = (
+        "Certificate issuance has been initiated by "
+        + str(approval.order.user.name)
+        + " through BitMemoir."
+    )
+    third_line = "PFA the certificate data."
+    fourth_line = "Click on the link below to approve."
+    link = (
+        "http://localhost:3000/#/approval/"
+        + str(approval.order.id)
+        + "/"
+        + str(approval.otp)
+    )
+    fifth_line = "Kind Regards,"
+    sixth_line = "Beyond Imagination Technologies."
+    message = "\n\n".join(
+        [
+            greeting,
+            first_line,
+            second_line,
+            third_line,
+            fourth_line,
+            link,
+            fifth_line,
+            sixth_line,
+        ]
     )
     sender = "navraj@beimagine.tech"
-    recipients = [recipient]
+    recipients = [approval.approver.email]
     email = EmailMessage(
         subject=subject,
         body=message,
         from_email=sender,
         to=recipients,
     )
-    email.attach_file(file)
+    # email.attach_file(file)
     email.send(fail_silently=False)
+
+
+@api_view(["POST", "GET"])
+def approve_order(request):
+    order_id = int(request.data["order_id"])
+    order = Certificate_Order.objects.get(pk=order_id)
+    otp = int(request.data["otp"])
+    approval = Approval_OTP.objects.get(order=order, otp=otp)
+    approval.approved = True
+    approval.save()
+    if Approval_OTP.objects.filter(order=order, approved=False).exists():
+        all_approvals = Approval_OTP.objects.filter(order=order, approved=False)
+        approvers = []
+        for approval in all_approvals:
+            approvers.append(model_to_dict(approval.approver))
+        return Response(
+            {
+                "status": "Success",
+                "response": approvers,
+            }
+        )
+    else:
+        if not order.fulfilled:
+            execute_certificate_order(order)
+        return Response(
+            {
+                "status": "Success",
+                "response": "Fulfilled",
+            }
+        )
+        
+
+@api_view(["POST", "GET"])
+def payment(request):
+    tx_hash = request.data["tx_hash"]
+    amount, user_address = check_payment(tx_hash)
+    if amount > 0:
+        user = User.objects.get(account=Web3.toChecksumAddress(user_address))
+        if amount >= 1000:
+            user.nft_quota = user.nft_quota + 1000
+            user.save()
+
+    return Response(
+            {
+                "status": "Success",
+                "response": "Fulfilled",
+            }
+        )
+   
+            

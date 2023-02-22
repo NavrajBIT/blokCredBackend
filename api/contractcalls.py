@@ -5,6 +5,7 @@ import os
 
 from web3 import Web3
 from web3.middleware import geth_poa_middleware
+import time
 
 
 # Contract data
@@ -95,3 +96,31 @@ def get_contract_details(contract_address, token_id):
     # print(event_filter)
 
     return owner, metadata_uri
+
+
+def check_payment(tx_hash):
+    contract_address = '0x75e8Dd78D660C611157a79bF518F04f37Cc7493C'
+    contract_filepath = os.path.join(settings.BASE_DIR, "api/tokenContract.json")
+    with open(contract_filepath, "r") as file:
+        contract_json = json.load(file)
+    abi = contract_json["abi"]
+    myContract = w3.eth.contract(address=contract_address, abi=abi)
+    receipt =  w3.eth.getTransactionReceipt(tx_hash)
+    user_address = receipt["from"]
+    tx_contract_address = receipt["to"]
+    mined = False
+    counter = 0
+    if contract_address == tx_contract_address:
+        while  counter < 5 and (not mined):
+            counter = counter + 1
+            if receipt["logs"][0]["type"] == "mined":
+                mined = True
+            else:
+                time.sleep(60)    
+    result = w3.eth.get_transaction(tx_hash)
+    func_obj, func_params = myContract.decode_function_input(result["input"])
+    if mined:
+        amount = int(w3.fromWei(func_params["amount"], "ether") )       
+    else:
+        amount = 0
+    return amount, user_address

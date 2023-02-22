@@ -10,4 +10,6 @@ urlpatterns = [
     path("verify", views.verify_cert),
     path("certificate", views.cert_template),
     path("issue", views.issue_certificates),
+    path("approval", views.approve_order),
+    path("payment", views.payment),
 ]
