@@ -167,35 +167,31 @@ def user(request):
                 user.approvers.clear()
                 approvers = json.loads(request.data["approvers"])
                 
-
-                # approvers is javaScript object
                 
-                # idProofApro=request.data["idProofApprover"],
-                # signNoteApprover=request.data["signNoteApprover"]
-                # print(idProofApro)
-                # print(signNoteApprover)
-                # for approver in approvers:
-                #     new_approver = Approver.objects.create(
-                #         name=approver["name"],
-                #         designation=approver["designation"],
-                #         email=approver["email"],
-                #         idProofApprover=idProofApro,
-                #         signNoteApprover=signNoteApprover,
-                #     )
-                #     user.approvers.add(new_approver)
-                
-                idproofAp=json.loads(request.data["idProofApprover"])
-                print(idproofAp)
-                signId=request.data["signNoteApprover"]
+                print(approvers)
+               
 
-                new_approver = Approver.objects.create(
-                    name=approvers[0]["name"],
-                    designation=approvers[0]["designation"],
-                    email=approvers[0]["email"],
-                    idProofApprover=idproofAp,
-                    signNoteApprover=signId,
-                )
-                user.approvers.add(new_approver)
+     
+                for approver in approvers:
+                    num=1
+                    new_approver = Approver.objects.create(
+                        name=approver["name"],
+                        designation=approver["designation"],
+                        email=approver["email"],
+                        idProofApprover=request.data[f"idProofApprovers{num}"],
+                        signNoteApprover=request.data[f"noteSignByHigherAuth{num}"],
+                    )
+                    user.approvers.add(new_approver)
+                    num+=1
+
+                # new_approver = Approver.objects.create(
+                #     name=approvers[0]["name"],
+                #     designation=approvers[0]["designation"],
+                #     email=approvers[0]["email"],
+                #     idProofApprover=idproofAp,
+                #     signNoteApprover=signId,
+                # )
+                # user.approvers.add(new_approver)
                     
             else:
                 setattr(user, item, request.data[item])
