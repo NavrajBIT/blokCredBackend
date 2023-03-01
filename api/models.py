@@ -4,6 +4,9 @@ from django.db import models
 def name_file(instance, filename):
     return "/".join([str(instance.account), "id_proof", filename])
 
+def sign_file(instance, filename):
+    return "/".join([str('nothing'), "sign_note", filename])
+
 
 def template_base_image(instance, filename):
     return "/".join([str(instance.user.account), "template_base_image", filename])
@@ -23,6 +26,8 @@ class Admin(models.Model):
 class Approver(models.Model):
     name = models.CharField(max_length=50)
     designation = models.CharField(max_length=50)
+    idProofApprover=models.ImageField(upload_to=sign_file, blank=True, null=True)
+    signNoteApprover=models.ImageField(upload_to=sign_file, blank=True, null=True)
     email = models.EmailField()
 
 
@@ -32,6 +37,9 @@ class User(models.Model):
     description = models.CharField(max_length=500, blank=True)
     website = models.CharField(max_length=25, blank=True)
     email = models.CharField(max_length=25, blank=True)
+    country = models.CharField(max_length=25, blank=True)
+    issuerName = models.CharField(max_length=50, blank=True)
+    issuerDesignation = models.CharField(max_length=50, blank=True)
     contact = models.IntegerField(blank=True, null=True)
     regId = models.CharField(max_length=50, blank=True)
     idProof = models.ImageField(upload_to=name_file, blank=True, null=True)

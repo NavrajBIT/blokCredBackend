@@ -33,6 +33,8 @@ from django.core.mail import send_mail, EmailMessage
 import csv
 from io import StringIO
 import random
+import ast
+
 
 
 BASE_DIR = settings.BASE_DIR
@@ -42,13 +44,13 @@ BASE_URL = "http://localhost:8000"
 def home_page(request):
     try:
         Admin.objects.create(
-            name="Navraj",
+            name="Hemant",
             designation="Developer",
             account=Web3.toChecksumAddress(
-                "0xE858f0370b101cD3F58E03F18BFA1240a591b5Fa"
+                "0xcebFD12bA1e85a797BFdf62081785E9103A96Dd3"
             ),
             added_by=Web3.toChecksumAddress(
-                "0xE858f0370b101cD3F58E03F18BFA1240a591b5Fa"
+                "0xcebFD12bA1e85a797BFdf62081785E9103A96Dd3"
             ),
         )
     except Exception as e:
@@ -101,6 +103,11 @@ user_self_keys = [
     "certificates",
     "storage_used",
     "approvers",
+    "issuerName",
+    "issuerDesignation",
+    "country",
+    
+    
 ]
 user_admin_keys = [
     "comment",
@@ -159,13 +166,37 @@ def user(request):
             elif item == "approvers":
                 user.approvers.clear()
                 approvers = json.loads(request.data["approvers"])
-                for approver in approvers:
-                    new_approver = Approver.objects.create(
-                        name=approver["name"],
-                        designation=approver["designation"],
-                        email=approver["email"],
-                    )
-                    user.approvers.add(new_approver)
+                
+
+                # approvers is javaScript object
+                
+                # idProofApro=request.data["idProofApprover"],
+                # signNoteApprover=request.data["signNoteApprover"]
+                # print(idProofApro)
+                # print(signNoteApprover)
+                # for approver in approvers:
+                #     new_approver = Approver.objects.create(
+                #         name=approver["name"],
+                #         designation=approver["designation"],
+                #         email=approver["email"],
+                #         idProofApprover=idProofApro,
+                #         signNoteApprover=signNoteApprover,
+                #     )
+                #     user.approvers.add(new_approver)
+                
+                idproofAp=json.loads(request.data["idProofApprover"])
+                print(idproofAp)
+                signId=request.data["signNoteApprover"]
+
+                new_approver = Approver.objects.create(
+                    name=approvers[0]["name"],
+                    designation=approvers[0]["designation"],
+                    email=approvers[0]["email"],
+                    idProofApprover=idproofAp,
+                    signNoteApprover=signId,
+                )
+                user.approvers.add(new_approver)
+                    
             else:
                 setattr(user, item, request.data[item])
             if item == "regId":
@@ -191,7 +222,10 @@ def user(request):
         user_model["idProof"] = ""
     approvers = []
     for approver in user.approvers.all():
-        approvers.append(model_to_dict(approver))
+        approver_model = model_to_dict(approver)
+        approver_model["idProofApprover"] = BASE_URL + approver_model["idProofApprover"].url
+        approver_model["signNoteApprover"] = BASE_URL + approver_model["signNoteApprover"].url
+        approvers.append(approver_model)
     user_model["approvers"] = approvers
     return Response({"status": "Success", "response": user_model})
 
