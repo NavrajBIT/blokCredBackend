@@ -12,4 +12,5 @@ urlpatterns = [
     path("issue", views.issue_certificates),
     path("approval", views.approve_order),
     path("payment", views.payment),
+    path("nonEssCert", views.issue_nonEsseCert),
 ]

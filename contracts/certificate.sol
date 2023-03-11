@@ -46,7 +46,7 @@ contract certificate is ERC721URIStorage {
         blockedOwnerToOwnerId[_owner] = blockedOwnerCount;
     }
 
-    function createCertificate(string memory _tokenURI)
+    function createCertificate(string memory _tokenURI, address _receiver)
         public
         onlyOwner
         returns (uint256 newTokenId)
@@ -54,6 +54,8 @@ contract certificate is ERC721URIStorage {
         tokenCounter = tokenCounter + 1;
         _safeMint(msg.sender, tokenCounter);
         _setTokenURI(tokenCounter, _tokenURI);
+        transferFrom(msg.sender, _receiver, tokenCounter);
         return tokenCounter;
     }
+
 }

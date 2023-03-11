@@ -5,7 +5,11 @@ def name_file(instance, filename):
     return "/".join([str(instance.account), "id_proof", filename])
 
 def sign_file(instance, filename):
-    return "/".join([str('nothing'), "sign_note", filename])
+    return "/".join([str(instance.account), "sign_note", filename])
+
+def idProofApprover(instance, filename):
+    return "/".join([str(instance.name), "idProofApprover", filename])
+
 
 
 def template_base_image(instance, filename):
@@ -25,9 +29,9 @@ class Admin(models.Model):
 
 class Approver(models.Model):
     name = models.CharField(max_length=50)
+    lastName = models.CharField(max_length=50,blank=True)
     designation = models.CharField(max_length=50)
-    idProofApprover=models.ImageField(upload_to=sign_file, blank=True, null=True)
-    signNoteApprover=models.ImageField(upload_to=sign_file, blank=True, null=True)
+    idProofApprover=models.ImageField(upload_to=idProofApprover, blank=True, null=True)
     email = models.EmailField()
 
 
@@ -39,6 +43,7 @@ class User(models.Model):
     email = models.CharField(max_length=25, blank=True)
     country = models.CharField(max_length=25, blank=True)
     issuerName = models.CharField(max_length=50, blank=True)
+    issuerLastName = models.CharField(max_length=50, blank=True)
     issuerDesignation = models.CharField(max_length=50, blank=True)
     contact = models.IntegerField(blank=True, null=True)
     regId = models.CharField(max_length=50, blank=True)
@@ -63,6 +68,8 @@ class User(models.Model):
     storage_limit = models.FloatField(default=5120)
     nft_quota = models.IntegerField(default=0)
     approvers = models.ManyToManyField(Approver)
+    noteSignByHigherAuth=models.ImageField(upload_to=sign_file, blank=True, null=True)
+    
 
 
 class Template_Variable(models.Model):
@@ -107,3 +114,10 @@ class Approval_OTP(models.Model):
     order = models.ForeignKey(Certificate_Order, on_delete=models.CASCADE)
     otp = models.IntegerField()
     approved = models.BooleanField(default=False)
+
+class Subscription(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    plan = models.CharField(max_length=200)
+    duration_days = models.IntegerField()
+    start_Date = models.DateTimeField()
+    end_Date = models.DateTimeField()

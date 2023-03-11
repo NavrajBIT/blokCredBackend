@@ -18,6 +18,7 @@ from .models import (
     Certificate,
     Approver,
     Approval_OTP,
+    Subscription,
 )
 from .contract_config import config
 from .storagecalls import get_metadata_url, get_all_nfts, upload_image, add_frame
@@ -34,8 +35,13 @@ import csv
 from io import StringIO
 import random
 import ast
+# datetime
+from datetime import datetime, timedelta,date
+import pytz
 
+utc=pytz.UTC
 
+from django.utils import timezone
 
 BASE_DIR = settings.BASE_DIR
 BASE_URL = "http://localhost:8000"
@@ -106,6 +112,7 @@ user_self_keys = [
     "issuerName",
     "issuerDesignation",
     "country",
+    "noteSignByHigherAuth"
     
     
 ]
@@ -133,11 +140,15 @@ def user(request):
                 user_model = model_to_dict(user)
                 try:
                     user_model["idProof"] = BASE_URL + user_model["idProof"].url
+                    user_model["noteSignByHigherAuth"] = BASE_URL + user_model["noteSignByHigherAuth"].url
                 except:
                     user_model["idProof"] = ""
+                    user_model["noteSignByHigherAuth"] =""
                 approvers = []
                 for approver in user.approvers.all():
-                    approvers.append(model_to_dict(approver))
+                    approver_model = model_to_dict(approver)
+                    approver_model["idProofApprover"] = BASE_URL + approver_model["idProofApprover"].url
+                    approvers.append(approver_model)
                 user_model["approvers"] = approvers
                 all_users_sorted.append(user_model)
             return Response({"status": "Success", "response": all_users_sorted})
@@ -166,8 +177,7 @@ def user(request):
             elif item == "approvers":
                 user.approvers.clear()
                 approvers = json.loads(request.data["approvers"])
-                
-                
+            
                 print(approvers)
                
 
@@ -179,7 +189,6 @@ def user(request):
                         designation=approver["designation"],
                         email=approver["email"],
                         idProofApprover=request.data[f"idProofApprovers{num}"],
-                        signNoteApprover=request.data[f"noteSignByHigherAuth{num}"],
                     )
                     user.approvers.add(new_approver)
                     num+=1
@@ -214,13 +223,14 @@ def user(request):
     user_model = model_to_dict(user)
     try:
         user_model["idProof"] = BASE_URL + user_model["idProof"].url
+        user_model["noteSignByHigherAuth"] = BASE_URL + user_model["noteSignByHigherAuth"].url
     except:
         user_model["idProof"] = ""
+        user_model["noteSignByHigherAuth"] =""
     approvers = []
     for approver in user.approvers.all():
         approver_model = model_to_dict(approver)
         approver_model["idProofApprover"] = BASE_URL + approver_model["idProofApprover"].url
-        approver_model["signNoteApprover"] = BASE_URL + approver_model["signNoteApprover"].url
         approvers.append(approver_model)
     user_model["approvers"] = approvers
     return Response({"status": "Success", "response": user_model})
@@ -916,6 +926,7 @@ def cert_template(request):
 def issue_certificates(request):
     account = Web3.toChecksumAddress(request.data["account"])
     user = User.objects.get(account=account)
+    subscription = Subscription.objects.get(user=user)
     template_id = request.data["template_id"]
     template = Template.objects.get(pk=template_id)
     file = request.data["file"]
@@ -923,11 +934,11 @@ def issue_certificates(request):
     file = order.file.read().decode("utf-8")
     csv_data = list(csv.reader(StringIO(file), delimiter=","))
     cert_no = len(csv_data) - 1
-    if cert_no > user.nft_quota:
+    if (cert_no >= user.nft_quota or subscription.end_Date <= timezone.now()):
         return Response(
             {
                 "status": "Failed",
-                "response": "Not enough balance",
+                "response": "Not enough balance/SUBSCRIPTION EXPIRED",
             }
         )
     else:
@@ -981,7 +992,68 @@ def issue_certificates(request):
             }
         )
 
-
+@api_view(["POST", "GET"])
+def issue_nonEsseCert(request):
+    account = Web3.toChecksumAddress(request.data["account"])
+    user = User.objects.get(account=account)
+    subscription = Subscription.objects.get(user=user)
+    template_id = request.data["template_id"]
+    template = Template.objects.get(pk=template_id)
+    file = request.data["file"]
+    order = Certificate_Order.objects.create(
+        user=user, template=template, file=file)
+    file = order.file.read().decode("utf-8")
+    csv_data = list(csv.reader(StringIO(file), delimiter=","))
+    cert_no = len(csv_data) - 1  
+    if (cert_no >= user.nft_quota or subscription.end_Date <= timezone.now()):
+        return Response(
+            {
+                "status": "Failed",
+                "response": "Not enough balance/SUBSCRIPTION EXPIRED",
+            }
+        )
+    else:
+        user.nft_quota = user.nft_quota - cert_no
+        user.save()
+    variable_name_index = {}
+    for index in enumerate(csv_data[0]):
+        if index[0] != 0 and index[0] < len(csv_data[0]) - 2:
+            variable_name_index[csv_data[0][index[0]]] = index[0]
+    for s_no in range(1, len(csv_data)):
+        variables = {}
+        for variable in variable_name_index.keys():
+            variables[variable] = csv_data[s_no][variable_name_index[variable]]
+        image = create_certificate_from_template(
+            template=template, variables=variables)
+        asset_name = " ".join([template.name, "Issued by", user.name])
+        description = ""
+        for variable in variables.keys():
+            description = description + variable + \
+                ": " + variables[variable] + ",  "
+        metadata_url, image_url = get_metadata_url(
+            asset_name=asset_name, asset_description=description, image=image
+        )
+        print(metadata_url, image_url)
+        certificate = Certificate.objects.create(
+            user=user,
+            template=template,
+            recipient=Web3.toChecksumAddress(
+                csv_data[s_no][len(csv_data[0]) - 2]),
+            email=csv_data[s_no][len(csv_data[0]) - 1],
+            image_url=image_url,
+            metadata_url=metadata_url,
+        )
+        order.certificates.add(certificate)
+        order.save()
+    # if len(list(user.approvers.all())) == 0:
+    execute_certificate_order(order)
+    return Response(
+        {
+            "status": "Success",
+            "response": "issued",
+        }
+    )
+    
 def create_certificate_from_template(template, variables):
     base_image = Image.open(template.base_image.path)
     width, height = base_image.size
@@ -1095,18 +1167,23 @@ def approve_order(request):
 @api_view(["POST", "GET"])
 def payment(request):
     tx_hash = request.data["tx_hash"]
+    plan = request.data["plan"]
+    duration_days = int(request.data["duration_days"])
+    start_Date = date.today()
+    end_Date = start_Date+timedelta(days=duration_days)
     amount, user_address = check_payment(tx_hash)
     if amount > 0:
         user = User.objects.get(account=Web3.toChecksumAddress(user_address))
         if amount >= 1000:
             user.nft_quota = user.nft_quota + 1000
             user.save()
-
+            Subscription.objects.create(
+                user=user, plan=plan, duration_days=duration_days,
+                start_Date=start_Date, end_Date=end_Date)
     return Response(
-            {
-                "status": "Success",
-                "response": "Fulfilled",
-            }
-        )
-   
+        {
+            "status": "Success",
+            "response": "Fulfilled",
+        }
+    )  
             
