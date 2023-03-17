@@ -42,6 +42,8 @@ import pytz
 utc=pytz.UTC
 
 from django.utils import timezone
+from django.core import serializers
+from django.http import JsonResponse
 
 BASE_DIR = settings.BASE_DIR
 BASE_URL = "http://localhost:8000"
@@ -847,6 +849,10 @@ def cert_template(request):
             category=category,
             subscription=subscription,
         )
+
+        
+    
+        
         variables = json.loads(request.data["variables"])
         for variable in variables:
             template_variable = Template_Variable.objects.create(
@@ -856,6 +862,7 @@ def cert_template(request):
                 height=variable["height"],
                 color=variable["color"],
                 y_pos=variable["y_pos"],
+                type=variable["type"],
             )
             template.variables.add(template_variable)
             template.save()
@@ -885,15 +892,15 @@ def cert_template(request):
                 sector=sector,
                 subscription=subscription,
             )[from_index:to_index]
+            # templates= json.dumps(list(templates.values()))     
         else:
             templates = Template.objects.filter(
                 sector=sector,
                 category=category,
                 subscription=subscription,
             )
-        print(templates)
         templates_sorted = []
-        for template in templates:
+        for template in templates: 
             my_template = model_to_dict(template)
             try:
                 my_template["base_image"] = BASE_URL + template.base_image.url
@@ -910,6 +917,7 @@ def cert_template(request):
                 "response": templates_sorted,
             }
         )
+    
 
     elif request_type == "delete":
         id = request.data["id"]
@@ -1005,6 +1013,7 @@ def issue_nonEsseCert(request):
     file = order.file.read().decode("utf-8")
     csv_data = list(csv.reader(StringIO(file), delimiter=","))
     cert_no = len(csv_data) - 1  
+    token_id=str(get_token_id(user.contract_address))
     if (cert_no >= user.nft_quota or subscription.end_Date <= timezone.now()):
         return Response(
             {
@@ -1025,6 +1034,21 @@ def issue_nonEsseCert(request):
             variables[variable] = csv_data[s_no][variable_name_index[variable]]
         image = create_certificate_from_template(
             template=template, variables=variables)
+        # image=Image.open(image)
+        # qr = qrcode.QRCode(box_size=3)
+        # print("adding qr code")
+        # print(user.contract_address)
+        # print(token_id)
+        # qr_data = "https://localhost:3000/verify/" + user.contract_address + "/" + token_id
+        # print(qr_data)
+        # qr.add_data(qr_data)
+        # qr.make()
+        # qr_image = qr.make_image(
+        #     fill_color="black", back_color="white"
+        # )
+        # image.paste(qr_image, (420, 470))
+        # image.save()
+        # image.show()
         asset_name = " ".join([template.name, "Issued by", user.name])
         description = ""
         for variable in variables.keys():
@@ -1074,7 +1098,22 @@ def create_certificate_from_template(template, variables):
             fill=variable.color,
             font=ImageFont.truetype("arial.ttf", text_box_height),
         ),
-    # base_image.show()
+        
+    qrcodeAttribute = template.qrcodeAttribute
+    print(qrcodeAttribute)
+    base_image.show()
+    qr = qrcode.QRCode(box_size=3)
+   
+    qr_data = "https://localhost:3000/verify/"
+
+    qr.add_data(qr_data)
+    qr.make()
+    qr_image = qr.make_image(
+            fill_color="black", back_color="white"
+    )
+    base_image.paste(qr_image, (420, 470))
+    base_image.show()
+
     return base_image.tobytes("xbm", "rgb")
 
 
@@ -1146,7 +1185,9 @@ def approve_order(request):
         all_approvals = Approval_OTP.objects.filter(order=order, approved=False)
         approvers = []
         for approval in all_approvals:
-            approvers.append(model_to_dict(approval.approver))
+            approver=model_to_dict(approval.approver)
+            approver['idProofApprover']=""
+            approvers.append(approver)
         return Response(
             {
                 "status": "Success",
@@ -1166,12 +1207,14 @@ def approve_order(request):
 
 @api_view(["POST", "GET"])
 def payment(request):
-    tx_hash = request.data["tx_hash"]
+    # tx_hash = request.data["tx_hash"]
     plan = request.data["plan"]
     duration_days = int(request.data["duration_days"])
     start_Date = date.today()
     end_Date = start_Date+timedelta(days=duration_days)
-    amount, user_address = check_payment(tx_hash)
+    # amount, user_address = check_payment(tx_hash)
+    user_address = request.data["user_address"]
+    amount = 1000
     if amount > 0:
         user = User.objects.get(account=Web3.toChecksumAddress(user_address))
         if amount >= 1000:

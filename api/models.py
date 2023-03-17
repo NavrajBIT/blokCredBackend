@@ -79,13 +79,16 @@ class Template_Variable(models.Model):
     width = models.FloatField(default=0)
     height = models.FloatField(default=0)
     color = models.CharField(max_length=10, default="#000000")
+    type=models.CharField(max_length=50, default="text")
+    
+
 
 
 class Template(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     name = models.CharField(max_length=50, default="default")
     base_image = models.ImageField(upload_to=template_base_image, blank=True, null=True)
-    variables = models.ManyToManyField(Template_Variable)
+    variables = models.ManyToManyField(Template_Variable,related_name='templates')
     sector = models.CharField(max_length=50, default="education")
     category = models.CharField(max_length=50, default="custom")
     subscription = models.CharField(max_length=50, default="user")
