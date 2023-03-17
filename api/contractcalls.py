@@ -20,9 +20,9 @@ bytecode = contract_json["bytecode"]
 
 
 # w3 = Web3(Web3.HTTPProvider("https://polygon-mumbai.g.alchemy.com/v2/CNCI8Fo64T3PScr0dquiyuZr0w1vzvGU"))
-# w3 = Web3(Web3.HTTPProvider("https://polygon-mainnet.g.alchemy.com/v2/4H5vwII7kCyZ4CabkkYlwtRiagTT-ZOG"))
+w3 = Web3(Web3.HTTPProvider("https://polygon-mainnet.g.alchemy.com/v2/4H5vwII7kCyZ4CabkkYlwtRiagTT-ZOG"))
 # w3 = Web3(Web3.HTTPProvider("https://polygon-rpc.com"))
-w3 = Web3(Web3.HTTPProvider("HTTP://127.0.0.1:8545"))
+# w3 = Web3(Web3.HTTPProvider("HTTP://127.0.0.1:8545"))
 w3.eth.defaultAccount = public_key
 w3.middleware_onion.inject(geth_poa_middleware, layer=0)
 # myContract = w3.eth.contract(address=contract_address, abi=abi)
@@ -67,6 +67,7 @@ def create_certificate(account, metadata, contract_address):
     token_id = my_contract.functions.tokenCounter().call()
     print(token_id)
     return token_id
+
 
 
 def get_token_id(contract_address):

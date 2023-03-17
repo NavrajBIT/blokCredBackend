@@ -4,6 +4,7 @@ from django.shortcuts import render
 from django.forms.models import model_to_dict
 from .contractcalls import (
     create_certificate,
+   
     deploy_contract,
     get_token_id,
     get_contract_details,
@@ -38,6 +39,7 @@ import ast
 # datetime
 from datetime import datetime, timedelta,date
 import pytz
+import os
 
 utc=pytz.UTC
 
@@ -55,10 +57,10 @@ def home_page(request):
             name="Hemant",
             designation="Developer",
             account=Web3.toChecksumAddress(
-                "0xcebFD12bA1e85a797BFdf62081785E9103A96Dd3"
+                "0xE858f0370b101cD3F58E03F18BFA1240a591b5Fa"
             ),
             added_by=Web3.toChecksumAddress(
-                "0xcebFD12bA1e85a797BFdf62081785E9103A96Dd3"
+                "0xE858f0370b101cD3F58E03F18BFA1240a591b5Fa"
             ),
         )
     except Exception as e:
@@ -178,12 +180,8 @@ def user(request):
                 save_certificate_templates(user, request)
             elif item == "approvers":
                 user.approvers.clear()
-                approvers = json.loads(request.data["approvers"])
-            
-                print(approvers)
-               
-
-     
+                approvers = json.loads(request.data["approvers"])            
+                print(approvers)   
                 for approver in approvers:
                     num=1
                     new_approver = Approver.objects.create(
@@ -748,7 +746,7 @@ def save_souvenir(image, user, asset_name, asset_description):
     Path(dir_path).mkdir(parents=True, exist_ok=True)
     # souvenir = Image.open(image)
     souvenir = image
-    souvenir.show()
+    # souvenir.show()
     souvenir.save(filepath)
     download_filepath = (
         str(BASE_URL) + "/media/" + user.account + "/souvenirs/" + asset_name + ".png"
@@ -849,10 +847,6 @@ def cert_template(request):
             category=category,
             subscription=subscription,
         )
-
-        
-    
-        
         variables = json.loads(request.data["variables"])
         for variable in variables:
             template_variable = Template_Variable.objects.create(
@@ -959,22 +953,15 @@ def issue_certificates(request):
     for s_no in range(1, len(csv_data)):
         variables = {}
         for variable in variable_name_index.keys():
-            variables[variable] = csv_data[s_no][variable_name_index[variable]]
-        image = create_certificate_from_template(template=template, variables=variables)
-        asset_name = " ".join([template.name, "Issued by", user.name])
-        description = ""
-        for variable in variables.keys():
-            description = description + variable + ": " + variables[variable] + ",  "
-        metadata_url, image_url = get_metadata_url(
-            asset_name=asset_name, asset_description=description, image=image
-        )
+            variables[variable] = csv_data[s_no][variable_name_index[variable]]        
         certificate = Certificate.objects.create(
             user=user,
             template=template,
             recipient=Web3.toChecksumAddress(csv_data[s_no][len(csv_data[0]) - 2]),
             email=csv_data[s_no][len(csv_data[0]) - 1],
-            image_url=image_url,
-            metadata_url=metadata_url,
+            image_url="",
+            metadata_url="",
+            variable_values=variables
         )
         order.certificates.add(certificate)
         order.save()
@@ -1033,22 +1020,7 @@ def issue_nonEsseCert(request):
         for variable in variable_name_index.keys():
             variables[variable] = csv_data[s_no][variable_name_index[variable]]
         image = create_certificate_from_template(
-            template=template, variables=variables)
-        # image=Image.open(image)
-        # qr = qrcode.QRCode(box_size=3)
-        # print("adding qr code")
-        # print(user.contract_address)
-        # print(token_id)
-        # qr_data = "https://localhost:3000/verify/" + user.contract_address + "/" + token_id
-        # print(qr_data)
-        # qr.add_data(qr_data)
-        # qr.make()
-        # qr_image = qr.make_image(
-        #     fill_color="black", back_color="white"
-        # )
-        # image.paste(qr_image, (420, 470))
-        # image.save()
-        # image.show()
+            template=template, variables=variables, token_id=0)    
         asset_name = " ".join([template.name, "Issued by", user.name])
         description = ""
         for variable in variables.keys():
@@ -1078,54 +1050,80 @@ def issue_nonEsseCert(request):
         }
     )
     
-def create_certificate_from_template(template, variables):
+def create_certificate_from_template(certificate, token_id):
+    template = certificate.template
+    print(certificate.variable_values)
+    variables = certificate.variable_values
     base_image = Image.open(template.base_image.path)
     width, height = base_image.size
     cert = ImageDraw.Draw(base_image)
     for variable in template.variables.all():
         text_box_width = variable.width * width / 100
         text_box_height = int(variable.height * height / 100)
-        text_box_pos_x = variable.x_pos * width / 100
-        text_box_pos_y = variable.y_pos * height / 100 - text_box_height / 2
-        x, y, w, h = cert.textbbox(
-            (0, 0),
-            variables[variable.name],
-            font=ImageFont.truetype("arial.ttf", text_box_height),
-        )
-        cert.text(
-            (text_box_pos_x - w / 2, text_box_pos_y),
-            variables[variable.name],
-            fill=variable.color,
-            font=ImageFont.truetype("arial.ttf", text_box_height),
-        ),
-        
-    qrcodeAttribute = template.qrcodeAttribute
-    print(qrcodeAttribute)
-    base_image.show()
-    qr = qrcode.QRCode(box_size=3)
-   
-    qr_data = "https://localhost:3000/verify/"
-
-    qr.add_data(qr_data)
-    qr.make()
-    qr_image = qr.make_image(
-            fill_color="black", back_color="white"
-    )
-    base_image.paste(qr_image, (420, 470))
-    base_image.show()
-
-    return base_image.tobytes("xbm", "rgb")
-
+        if variable.type == "text":
+            text_box_pos_x = variable.x_pos * width / 100
+            text_box_pos_y = variable.y_pos * height / 100 - text_box_height / 2
+            x, y, w, h = cert.textbbox(
+                (0, 0),
+                variables[variable.name],
+                font=ImageFont.truetype("arial.ttf", text_box_height),
+            )
+            cert.text(
+                (text_box_pos_x - w / 2, text_box_pos_y),
+                variables[variable.name],
+                fill=variable.color,
+                font=ImageFont.truetype("arial.ttf", text_box_height),
+            ),
+        elif variable.type == "qr":
+            print("Image size =", height)
+            print("QR size ", int(variable.height * height / 100))
+            qr = qrcode.QRCode(version=None, box_size=3)   
+            qr_data = "http://bitmemoirlatam/#/verify/" + template.user.contract_address + "/" + str(token_id)
+            qr.add_data(qr_data)
+            qr.make(fit=True)
+            qr_image = qr.make_image(
+                    fill_color=variable.color, back_color=(255, 255, 255, 0)
+            )
+            qr_image = qr_image.resize((text_box_height, text_box_height))
+            mask = qr_image.convert("L").point(lambda x: 255 - x)
+            base_image.paste(qr_image, (int(variable.x_pos * width / 100), int(variable.y_pos * height / 100 - text_box_height / 2)), mask=mask)
+    # base_image.show()
+    root_dir = os.path.dirname(str(BASE_DIR) + "/media/" + certificate.user.account + "/certificates/")
+    root_url = os.path.dirname(str(BASE_URL) + "/media/" + certificate.user.account + "/certificates/")
+    if not os.path.exists(root_dir):
+        os.makedirs(root_dir)
+    image_location = str(root_dir) + "/" + str(certificate.id ) + ".png"
+    image_url = str(root_url) + "/" + str(certificate.id )+ ".png"
+    print(image_location, image_url)
+    base_image.save(image_location)
+    asset_name = " ".join([template.name, "Issued by", template.user.name])
+    description = ""
+    for variable in variables.keys():
+        description = description + variable + ": " + variables[variable] + ",  "
+    metadata = {
+        "name": asset_name,
+        "description": description,
+        "image": image_url,
+    }
+    metadata_filepath = str(root_dir) + "/" + str(certificate.id )+ ".json"
+    with open(metadata_filepath, "w") as metadata_file:
+        json.dump(metadata, metadata_file)
+    metadata_url = str(root_url) + "/" + str(certificate.id ) + ".json"   
+    certificate.image_url = image_url
+    certificate.metadata_url = metadata_url
+    certificate.token_id = token_id
+    certificate.save()
+    return metadata_url
 
 def execute_certificate_order(order):
-    for certificate in order.certificates.all():
+    for certificate in order.certificates.all():  
+        metadata_url = BASE_URL + "/media/" + certificate.user.account + "/certificates/" + str(certificate.id ) + ".json"
         token_id = create_certificate(
             account=certificate.recipient,
-            metadata=certificate.metadata_url,
+            metadata=metadata_url,
             contract_address=order.user.contract_address,
         )
-        certificate.token_id = token_id
-        certificate.save()
+        create_certificate_from_template(certificate=certificate, token_id=token_id)
     order.fulfilled = True
     order.save()
 

@@ -102,6 +102,7 @@ class Certificate(models.Model):
     image_url = models.URLField(max_length=500)
     metadata_url = models.URLField(max_length=500)
     email = models.EmailField()
+    variable_values = models.JSONField()
 
 
 class Certificate_Order(models.Model):
