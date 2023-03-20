@@ -3,8 +3,7 @@ from rest_framework.decorators import api_view
 from django.shortcuts import render
 from django.forms.models import model_to_dict
 from .contractcalls import (
-    create_certificate,
-   
+    create_certificate,   
     deploy_contract,
     get_token_id,
     get_contract_details,
@@ -48,7 +47,8 @@ from django.core import serializers
 from django.http import JsonResponse
 
 BASE_DIR = settings.BASE_DIR
-BASE_URL = "http://localhost:8000"
+BASE_URL = "https://bitmemoir.org"
+FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
 
 
 def home_page(request):
@@ -569,7 +569,7 @@ def create_certificate_image(user, template, variable1, variable2, token_id):
             (0, 0),
             text["text"],
             font=ImageFont.truetype(
-                "arial.ttf", int(base_font_size * text["font_size"])
+                FONT_PATH, int(base_font_size * text["font_size"])
             ),
         )
         print("got till here.....")
@@ -578,67 +578,67 @@ def create_certificate_image(user, template, variable1, variable2, token_id):
             text["text"],
             fill=certificate["fontColor"],
             font=ImageFont.truetype(
-                "arial.ttf", int(base_font_size * text["font_size"])
+                FONT_PATH, int(base_font_size * text["font_size"])
             ),
         )
     x, y, w, h = cert.textbbox(
         (0, 0),
         certificate["signtext1"],
-        font=ImageFont.truetype("arial.ttf", int(base_font_size * 2)),
+        font=ImageFont.truetype(FONT_PATH, int(base_font_size * 2)),
     )
     cert.text(
         (10 + (216 - w) / 2, 680),
         certificate["signtext1"],
         fill=certificate["fontColor"],
-        font=ImageFont.truetype("arial.ttf", int(base_font_size * 2)),
+        font=ImageFont.truetype(FONT_PATH, int(base_font_size * 2)),
     )
     x, y, w, h = cert.textbbox(
         (0, 0),
         certificate["signtext3"],
-        font=ImageFont.truetype("arial.ttf", int(base_font_size * 2)),
+        font=ImageFont.truetype(FONT_PATH, int(base_font_size * 2)),
     )
     cert.text(
         (1070 - 216 + (216 - w) / 2, 680),
         certificate["signtext3"],
         fill=certificate["fontColor"],
-        font=ImageFont.truetype("arial.ttf", int(base_font_size * 2)),
+        font=ImageFont.truetype(FONT_PATH, int(base_font_size * 2)),
     )
 
     cert.text(
         (560, 480),
         "Contract:",
         fill=certificate["fontColor"],
-        font=ImageFont.truetype("arial.ttf", int(base_font_size * 1.5)),
+        font=ImageFont.truetype(FONT_PATH, int(base_font_size * 1.5)),
     )
     cert.text(
         (620, 480),
         user.contract_address,
         fill=certificate["fontColor"],
-        font=ImageFont.truetype("arial.ttf", int(base_font_size * 1.5)),
+        font=ImageFont.truetype(FONT_PATH, int(base_font_size * 1.5)),
     )
     cert.text(
         (560, 500),
         "Token Id:",
         fill=certificate["fontColor"],
-        font=ImageFont.truetype("arial.ttf", int(base_font_size * 1.5)),
+        font=ImageFont.truetype(FONT_PATH, int(base_font_size * 1.5)),
     )
     cert.text(
         (620, 500),
         token_id,
         fill=certificate["fontColor"],
-        font=ImageFont.truetype("arial.ttf", int(base_font_size * 1.5)),
+        font=ImageFont.truetype(FONT_PATH, int(base_font_size * 1.5)),
     )
     cert.text(
         (560, 520),
         "Chain Id:",
         fill=certificate["fontColor"],
-        font=ImageFont.truetype("arial.ttf", int(base_font_size * 1.5)),
+        font=ImageFont.truetype(FONT_PATH, int(base_font_size * 1.5)),
     )
     cert.text(
         (620, 520),
         "137",
         fill=certificate["fontColor"],
-        font=ImageFont.truetype("arial.ttf", int(base_font_size * 1.5)),
+        font=ImageFont.truetype(FONT_PATH, int(base_font_size * 1.5)),
     )
     qr = qrcode.QRCode(box_size=3)
     print("adding qr code")
@@ -927,7 +927,7 @@ def cert_template(request):
 @api_view(["POST", "GET"])
 def issue_certificates(request):
     account = Web3.toChecksumAddress(request.data["account"])
-    user = User.objects.get(account=account)
+    user = User.objects.get(account=account)    
     subscription = Subscription.objects.get(user=user)
     template_id = request.data["template_id"]
     template = Template.objects.get(pk=template_id)
@@ -990,17 +990,15 @@ def issue_certificates(request):
 @api_view(["POST", "GET"])
 def issue_nonEsseCert(request):
     account = Web3.toChecksumAddress(request.data["account"])
-    user = User.objects.get(account=account)
+    user = User.objects.get(account=account)    
     subscription = Subscription.objects.get(user=user)
     template_id = request.data["template_id"]
     template = Template.objects.get(pk=template_id)
     file = request.data["file"]
-    order = Certificate_Order.objects.create(
-        user=user, template=template, file=file)
+    order = Certificate_Order.objects.create(user=user, template=template, file=file)
     file = order.file.read().decode("utf-8")
     csv_data = list(csv.reader(StringIO(file), delimiter=","))
-    cert_no = len(csv_data) - 1  
-    token_id=str(get_token_id(user.contract_address))
+    cert_no = len(csv_data) - 1
     if (cert_no >= user.nft_quota or subscription.end_Date <= timezone.now()):
         return Response(
             {
@@ -1018,30 +1016,18 @@ def issue_nonEsseCert(request):
     for s_no in range(1, len(csv_data)):
         variables = {}
         for variable in variable_name_index.keys():
-            variables[variable] = csv_data[s_no][variable_name_index[variable]]
-        image = create_certificate_from_template(
-            template=template, variables=variables, token_id=0)    
-        asset_name = " ".join([template.name, "Issued by", user.name])
-        description = ""
-        for variable in variables.keys():
-            description = description + variable + \
-                ": " + variables[variable] + ",  "
-        metadata_url, image_url = get_metadata_url(
-            asset_name=asset_name, asset_description=description, image=image
-        )
-        print(metadata_url, image_url)
+            variables[variable] = csv_data[s_no][variable_name_index[variable]]        
         certificate = Certificate.objects.create(
             user=user,
             template=template,
-            recipient=Web3.toChecksumAddress(
-                csv_data[s_no][len(csv_data[0]) - 2]),
+            recipient=Web3.toChecksumAddress(csv_data[s_no][len(csv_data[0]) - 2]),
             email=csv_data[s_no][len(csv_data[0]) - 1],
-            image_url=image_url,
-            metadata_url=metadata_url,
+            image_url="",
+            metadata_url="",
+            variable_values=variables
         )
         order.certificates.add(certificate)
-        order.save()
-    # if len(list(user.approvers.all())) == 0:
+        order.save()    
     execute_certificate_order(order)
     return Response(
         {
@@ -1049,6 +1035,7 @@ def issue_nonEsseCert(request):
             "response": "issued",
         }
     )
+
     
 def create_certificate_from_template(certificate, token_id):
     template = certificate.template
@@ -1066,19 +1053,19 @@ def create_certificate_from_template(certificate, token_id):
             x, y, w, h = cert.textbbox(
                 (0, 0),
                 variables[variable.name],
-                font=ImageFont.truetype("arial.ttf", text_box_height),
+                font=ImageFont.truetype(FONT_PATH, text_box_height),
             )
             cert.text(
                 (text_box_pos_x - w / 2, text_box_pos_y),
                 variables[variable.name],
                 fill=variable.color,
-                font=ImageFont.truetype("arial.ttf", text_box_height),
+                font=ImageFont.truetype(FONT_PATH, text_box_height),
             ),
         elif variable.type == "qr":
             print("Image size =", height)
             print("QR size ", int(variable.height * height / 100))
-            qr = qrcode.QRCode(version=None, box_size=3)   
-            qr_data = "http://bitmemoirlatam/#/verify/" + template.user.contract_address + "/" + str(token_id)
+            qr = qrcode.QRCode(version=None, box_size=3)
+            qr_data = "https://bitmemoirlatam.com/#/verify/" + template.user.contract_address + "/" + str(token_id)
             qr.add_data(qr_data)
             qr.make(fit=True)
             qr_image = qr.make_image(

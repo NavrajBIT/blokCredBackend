@@ -8,3 +8,4 @@ node_modules
 static
 env
 get-pip.py
+olddata.json
