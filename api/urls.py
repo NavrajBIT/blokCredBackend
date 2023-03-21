@@ -13,4 +13,5 @@ urlpatterns = [
     path("approval", views.approve_order),
     path("payment", views.payment),
     path("nonEssCert", views.issue_nonEsseCert),
+    path("subForDev", views.customSubscriptionForDev),
 ]
