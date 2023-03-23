@@ -47,8 +47,10 @@ from django.core import serializers
 from django.http import JsonResponse
 
 BASE_DIR = settings.BASE_DIR
-BASE_URL = "https://bitmemoir.org"
-FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
+BASE_URL = "http://localhost:8000"
+# FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
+FONT_PATH='arial.ttf'
+
 
 
 def home_page(request):
@@ -57,7 +59,7 @@ def home_page(request):
             name="Hemant",
             designation="Developer",
             account=Web3.toChecksumAddress(
-                "0xE858f0370b101cD3F58E03F18BFA1240a591b5Fa"
+                "0xcebFD12bA1e85a797BFdf62081785E9103A96Dd3"
             ),
             added_by=Web3.toChecksumAddress(
                 "0xE858f0370b101cD3F58E03F18BFA1240a591b5Fa"
@@ -131,6 +133,7 @@ user_admin_keys = [
 
 @api_view(["POST", "GET"])
 def user(request):
+
     try:
         account = Web3.toChecksumAddress(request.data["account"])
     except:
@@ -224,9 +227,15 @@ def user(request):
     try:
         user_model["idProof"] = BASE_URL + user_model["idProof"].url
         user_model["noteSignByHigherAuth"] = BASE_URL + user_model["noteSignByHigherAuth"].url
+        subsDetails= Subscription.objects.get(
+        id=user_model["subscription"]
+        )
+        subsDetails=model_to_dict(subsDetails)
+        user_model["subscription"]=subsDetails
     except:
         user_model["idProof"] = ""
         user_model["noteSignByHigherAuth"] =""
+        user_model["subscription"]=""
     approvers = []
     for approver in user.approvers.all():
         approver_model = model_to_dict(approver)
@@ -770,6 +779,8 @@ def save_souvenir(image, user, asset_name, asset_description):
 def verify_cert(request):
     contract_address = request.data["contract_address"]
     token_id = request.data["token_id"]
+    print(contract_address)
+    print(token_id)
     try:
         owner, metadata_uri = get_contract_details(
             contract_address=contract_address, token_id=token_id
@@ -827,7 +838,6 @@ def send_cert_email(recipient, file, recipient_name, sender_name):
     email.attach_file(file)
     email.send(fail_silently=False)
 
-
 @api_view(["POST", "GET"])
 def cert_template(request):
     request_type = request.data["request_type"]
@@ -872,7 +882,6 @@ def cert_template(request):
                 "response": response_data,
             }
         )
-
     elif request_type == "read":
         sector = request.data["sector"]
         category = request.data["category"]
@@ -886,7 +895,7 @@ def cert_template(request):
                 sector=sector,
                 subscription=subscription,
             )[from_index:to_index]
-            # templates= json.dumps(list(templates.values()))     
+            # templates= json.dumps(list(templates.values()))
         else:
             templates = Template.objects.filter(
                 sector=sector,
@@ -894,7 +903,7 @@ def cert_template(request):
                 subscription=subscription,
             )
         templates_sorted = []
-        for template in templates: 
+        for template in templates:
             my_template = model_to_dict(template)
             try:
                 my_template["base_image"] = BASE_URL + template.base_image.url
@@ -911,8 +920,6 @@ def cert_template(request):
                 "response": templates_sorted,
             }
         )
-    
-
     elif request_type == "delete":
         id = request.data["id"]
         Template.objects.get(pk=id).delete()
@@ -926,6 +933,7 @@ def cert_template(request):
 
 @api_view(["POST", "GET"])
 def issue_certificates(request):
+    server_url = request.META.get('HTTP_REFERER', '')
     account = Web3.toChecksumAddress(request.data["account"])
     user = User.objects.get(account=account)    
     subscription = Subscription.objects.get(user=user)
@@ -966,7 +974,7 @@ def issue_certificates(request):
         order.certificates.add(certificate)
         order.save()
     if len(list(user.approvers.all())) == 0:
-        execute_certificate_order(order)
+        execute_certificate_order(order,server_url)
         return Response(
             {
                 "status": "Success",
@@ -989,6 +997,8 @@ def issue_certificates(request):
 
 @api_view(["POST", "GET"])
 def issue_nonEsseCert(request):
+    server_url = request.META.get('HTTP_REFERER', '')
+    print(server_url)
     account = Web3.toChecksumAddress(request.data["account"])
     user = User.objects.get(account=account)    
     subscription = Subscription.objects.get(user=user)
@@ -1028,7 +1038,7 @@ def issue_nonEsseCert(request):
         )
         order.certificates.add(certificate)
         order.save()    
-    execute_certificate_order(order)
+    execute_certificate_order(order,server_url)
     return Response(
         {
             "status": "Success",
@@ -1037,7 +1047,8 @@ def issue_nonEsseCert(request):
     )
 
     
-def create_certificate_from_template(certificate, token_id):
+def create_certificate_from_template(certificate, token_id,server_url):
+    print(token_id)
     template = certificate.template
     print(certificate.variable_values)
     variables = certificate.variable_values
@@ -1065,7 +1076,8 @@ def create_certificate_from_template(certificate, token_id):
             print("Image size =", height)
             print("QR size ", int(variable.height * height / 100))
             qr = qrcode.QRCode(version=None, box_size=3)
-            qr_data = "https://bitmemoirlatam.com/#/verify/" + template.user.contract_address + "/" + str(token_id)
+            qr_data = server_url+ "#/verify/" + template.user.contract_address + "/" + str(token_id)
+            print(qr_data)
             qr.add_data(qr_data)
             qr.make(fit=True)
             qr_image = qr.make_image(
@@ -1076,6 +1088,7 @@ def create_certificate_from_template(certificate, token_id):
             base_image.paste(qr_image, (int(variable.x_pos * width / 100), int(variable.y_pos * height / 100 - text_box_height / 2)), mask=mask)
     # base_image.show()
     root_dir = os.path.dirname(str(BASE_DIR) + "/media/" + certificate.user.account + "/certificates/")
+    print(root_dir)
     root_url = os.path.dirname(str(BASE_URL) + "/media/" + certificate.user.account + "/certificates/")
     if not os.path.exists(root_dir):
         os.makedirs(root_dir)
@@ -1102,7 +1115,7 @@ def create_certificate_from_template(certificate, token_id):
     certificate.save()
     return metadata_url
 
-def execute_certificate_order(order):
+def execute_certificate_order(order,server_url):
     for certificate in order.certificates.all():  
         metadata_url = BASE_URL + "/media/" + certificate.user.account + "/certificates/" + str(certificate.id ) + ".json"
         token_id = create_certificate(
@@ -1110,7 +1123,9 @@ def execute_certificate_order(order):
             metadata=metadata_url,
             contract_address=order.user.contract_address,
         )
-        create_certificate_from_template(certificate=certificate, token_id=token_id)
+        print(token_id)
+        print(metadata_url)
+        create_certificate_from_template(certificate=certificate, token_id=token_id,server_url=server_url)
     order.fulfilled = True
     order.save()
 
@@ -1192,26 +1207,57 @@ def approve_order(request):
 
 @api_view(["POST", "GET"])
 def payment(request):
-    # tx_hash = request.data["tx_hash"]
+    tx_hash = request.data["tx_hash"]
     plan = request.data["plan"]
     duration_days = int(request.data["duration_days"])
     start_Date = date.today()
     end_Date = start_Date+timedelta(days=duration_days)
-    # amount, user_address = check_payment(tx_hash)
-    user_address = request.data["user_address"]
-    amount = 1000
+    amount, user_address = check_payment(tx_hash)
     if amount > 0:
         user = User.objects.get(account=Web3.toChecksumAddress(user_address))
         if amount >= 1000:
             user.nft_quota = user.nft_quota + 1000
-            user.save()
-            Subscription.objects.create(
-                user=user, plan=plan, duration_days=duration_days,
+            # user.save()
+            subs=Subscription.objects.create(
+                plan=plan, duration_days=duration_days,
                 start_Date=start_Date, end_Date=end_Date)
+            user.subscription =  subs
+            user.save()
     return Response(
         {
             "status": "Success",
             "response": "Fulfilled",
         }
     )  
-            
+        
+@api_view(["POST", "GET"])
+def customSubscriptionForDev(request):
+        # tx_hash = request.data["tx_hash"]
+    plan = request.data["plan"]
+    duration_days = int(request.data["duration_days"])
+    start_Date = date.today()
+    end_Date = start_Date+timedelta(days=duration_days)
+    # amount, user_address = check_payment(tx_hash)
+    user_address = request.data["user_address"]
+    print(user_address)
+    print(plan)
+    print(duration_days)
+    amount = 1000
+    if amount > 0:
+        user = User.objects.get(account=Web3.toChecksumAddress(user_address))
+        if amount >= 1000:
+            user.nft_quota = user.nft_quota + 1000
+            # user.save()
+            subs=Subscription.objects.create(
+                user=user,plan=plan, duration_days=duration_days,
+                start_Date=start_Date, end_Date=end_Date)
+            print(subs)
+            user.subscription =  subs
+            user.save()
+    return Response(
+        {
+            "status": "Success",
+            "response": "Fulfilled",
+        }
+    )  
+        

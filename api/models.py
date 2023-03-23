@@ -35,6 +35,13 @@ class Approver(models.Model):
     email = models.EmailField()
 
 
+class Subscription(models.Model):
+    # user = models.ForeignKey(User, on_delete=models.CASCADE)
+    plan = models.CharField(max_length=200)
+    duration_days = models.IntegerField()
+    start_Date = models.DateTimeField()
+    end_Date = models.DateTimeField()
+    
 class User(models.Model):
     account = models.CharField(max_length=50, primary_key=True)
     name = models.CharField(max_length=100, blank=True)
@@ -67,10 +74,12 @@ class User(models.Model):
     storage_used = models.FloatField(default=0)
     storage_limit = models.FloatField(default=5120)
     nft_quota = models.IntegerField(default=0)
+    subscription=models.OneToOneField(Subscription,on_delete=models.CASCADE,blank=True, null=True)
     approvers = models.ManyToManyField(Approver)
     noteSignByHigherAuth=models.ImageField(upload_to=sign_file, blank=True, null=True)
     
 
+    
 
 class Template_Variable(models.Model):
     name = models.CharField(max_length=50)
@@ -119,9 +128,3 @@ class Approval_OTP(models.Model):
     otp = models.IntegerField()
     approved = models.BooleanField(default=False)
 
-class Subscription(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    plan = models.CharField(max_length=200)
-    duration_days = models.IntegerField()
-    start_Date = models.DateTimeField()
-    end_Date = models.DateTimeField()
