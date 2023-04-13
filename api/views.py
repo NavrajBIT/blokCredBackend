@@ -39,6 +39,7 @@ import ast
 from datetime import datetime, timedelta,date
 import pytz
 import os
+from io import BytesIO
 
 utc=pytz.UTC
 
@@ -56,13 +57,13 @@ FONT_PATH='arial.ttf'
 def home_page(request):
     try:
         Admin.objects.create(
-            name="Hemant",
+            name="Shubham",
             designation="Developer",
             account=Web3.toChecksumAddress(
-                "0xcebFD12bA1e85a797BFdf62081785E9103A96Dd3"
+                "0xb753F847356dEF957Dc809979fCB9B67d34daB32"
             ),
             added_by=Web3.toChecksumAddress(
-                "0xE858f0370b101cD3F58E03F18BFA1240a591b5Fa"
+                "0xb753F847356dEF957Dc809979fCB9B67d34daB32"
             ),
         )
     except Exception as e:
@@ -362,7 +363,8 @@ def mint_souvenir(request):
     image = request.data["image"]
     asset_name = request.data["asset_name"]
     asset_description = request.data["asset_description"]
-    recipient = Web3.toChecksumAddress(request.data["recipient"])
+    recipient = request.data["recipient"]
+    recipient_email = request.data["recipientEmail"]
     frame = request.data["frame"]
     user = User.objects.get(account=account)
     if frame == "":
@@ -376,14 +378,40 @@ def mint_souvenir(request):
         image=framed_image,
         user=user,
     )
-    tx_hash = create_certificate(
-        account=recipient,
-        metadata=metadata_url,
-        contract_address=contract_address,
-    )
-    user.total_souvenirs = user.total_souvenirs + 1
-    user.save()
-    return Response({"status": "Success", "response": "tx_hash"})
+
+    dir_path = str(BASE_DIR) + "/media/" + user.account + "/souvenirs/"
+    filepath = dir_path + asset_name + ".png"
+    files = open(filepath, "rb")
+    # files.seek(0)
+
+    if not recipient and not recipient_email:
+            return Response({"status": "Failled"})
+
+    # handle cases based on provided parameters
+    if recipient and recipient_email:
+        print("calling 1")
+        tx_hash = create_certificate(
+            account=recipient,
+            metadata=metadata_url,
+            contract_address=contract_address,
+        )
+        user.total_souvenirs = user.total_souvenirs + 1
+        user.save()
+        send_souvenir_email(recipient_email, files, sender_name=user.name)
+    elif recipient:
+        print("calling 2")
+        tx_hash = create_certificate(
+            account=recipient,
+            metadata=metadata_url,
+            contract_address=contract_address,
+        )
+        user.total_souvenirs = user.total_souvenirs + 1
+        user.save()
+    elif recipient_email:
+        print("calling 3")
+        tx_hash = None
+        send_souvenir_email(recipient_email,files,sender_name=user.name)
+    return Response({"status": "Success", "response": tx_hash})
 
 
 def mint_certificate(request):
@@ -753,8 +781,8 @@ def save_souvenir(image, user, asset_name, asset_description):
     dir_path = str(BASE_DIR) + "/media/" + user.account + "/souvenirs/"
     filepath = dir_path + asset_name + ".png"
     Path(dir_path).mkdir(parents=True, exist_ok=True)
-    # souvenir = Image.open(image)
-    souvenir = image
+    souvenir = Image.open(image)
+    # souvenir = image
     # souvenir.show()
     souvenir.save(filepath)
     download_filepath = (
@@ -837,6 +865,33 @@ def send_cert_email(recipient, file, recipient_name, sender_name):
     )
     email.attach_file(file)
     email.send(fail_silently=False)
+
+def send_souvenir_email(recipient_email, files, sender_name):
+    image_bytes = BytesIO(files.read())
+    # Attach the image to the email message
+    attachment_name = 'nft_image.png' 
+    attachment_data = image_bytes.getvalue()
+    attachment_type = "files/png"
+
+    subject = "NFT as a souvenir recieved."
+    message = (
+        "Hi"
+        + ",\nYou have recieved NFT as a souvenir from "
+        + sender_name
+        + ". \n"
+    )
+    sender = "support@beimagine.tech"
+    recipients = [recipient_email]
+    email = EmailMessage(
+        subject=subject,
+        body=message,
+        from_email=sender,
+        to=recipients,
+    )
+    email.attach(attachment_name, attachment_data, attachment_type)
+    email.send(fail_silently=False)
+
+
 
 @api_view(["POST", "GET"])
 def cert_template(request):
