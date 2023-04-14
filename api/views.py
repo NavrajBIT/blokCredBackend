@@ -19,6 +19,9 @@ from .models import (
     Approver,
     Approval_OTP,
     Subscription,
+    Batch,
+    Students
+    
 )
 from .contract_config import config
 from .storagecalls import get_metadata_url, get_all_nfts, upload_image, add_frame
@@ -39,7 +42,7 @@ import ast
 from datetime import datetime, timedelta,date
 import pytz
 import os
-
+from django.views.decorators.csrf import csrf_exempt
 utc=pytz.UTC
 
 from django.utils import timezone
@@ -807,6 +810,8 @@ def verify_cert(request):
         for trait in metadata.keys():
             if trait != "name" and trait != "description":
                 nft_data[trait] = metadata[trait]
+                
+        print(nft_data)
         return Response(
             {
                 "status": "Success",
@@ -1045,8 +1050,217 @@ def issue_nonEsseCert(request):
             "response": "issued",
         }
     )
+    
+       
+@api_view(["POST", "GET"])
+def create_batch(request):
+    request_type= request.data["request_type"]
+    if request_type == "create_batch":
+        account = Web3.toChecksumAddress(request.data["account"])
+        name=request.data["name"]
+        description=request.data["description"]
+        nft_image = request.data["nft_image"]
+        StudentsFile = request.data["StudentsFile"]
+        variables = json.loads(request.data["variables"])
+        qrAttribute=variables[0]
+        
+        
+    
+        user = User.objects.get(account=account)
+        batch = Batch.objects.create(
+            user=user,
+            name=name,
+            decription=description,
+            batch_nft_image =nft_image,
+            studentsFile=StudentsFile
+        )
+        file = batch.studentsFile.read().decode("utf-8")
+        csv_data = list(csv.reader(StringIO(file), delimiter=","))
+        # print(csv_data)
+        # print(len(csv_data))
+        
+        for student in range(1, len(csv_data)):
+            studentWallet= csv_data[student][1]
+            student=Students.objects.create(
+                wallet_address = Web3.toChecksumAddress(studentWallet),
+                batch_name = batch
+            )
+            metadata_url = BASE_URL + "/media/" +batch.user.account+"/"+batch.name + "/certificates/"+ str(studentWallet) + ".json"
+            token_id = create_certificate(
+                account=studentWallet,
+                metadata=metadata_url,
+                contract_address=batch.user.contract_address,
+            )
+            base_image = Image.open(batch.batch_nft_image.path)
+            width, height = base_image.size
+            text_box_height = int(int(qrAttribute['height']) * height / 100)
+            text_box_width = int(qrAttribute['width']) * width / 100
+            # cert = ImageDraw.Draw(base_image)
+            qr = qrcode.QRCode(version=None,box_size=3)
+            qr_data = "https:www.bitmemoirlatam.com/#/verify/"+batch.user.contract_address+"/"+str(token_id)
+            qr.add_data(qr_data)
+            qr.make(fit=True)
+            qr_image = qr.make_image(fill_color=qrAttribute['color'], back_color=(255, 255, 255, 0))
+            qr_image = qr_image.resize((text_box_height, text_box_height))
+            mask =qr_image.convert("L").point(lambda x: 255 - x)
+            base_image.paste(qr_image, (int(qrAttribute['x_pos'] * width / 100), int(qrAttribute['y_pos'] * height / 100 - text_box_height / 2)), mask=mask)
+            
+            base_image.show()
+            
+            root_dir=os.path.dirname(str(BASE_DIR) + "/media/" +batch.user.account+"/"+batch.name + "/certificates/")
+            root_url = os.path.dirname(str(BASE_URL) + "/media/"+batch.user.account+"/"+batch.name + "/certificates/")
+            if not os.path.exists(root_dir):
+                os.makedirs(root_dir)
+            image_location = str(root_dir) + "/" + str(studentWallet ) + ".png"
+            image_url =str(root_url) + "/" + str(studentWallet )+ ".png"
+            base_image.save(image_location)
+            asset_name = " ".join([ "Issued by",batch.user.name])
+            description = batch.decription
+
+            metadata = {
+                "name": asset_name,
+                "description": description,
+                "image": image_url,
+            }
+            
+            metadata_filepath = str(root_dir) + "/" + str(studentWallet ) + ".json"
+            with open(metadata_filepath, "w") as metadata_file:
+                json.dump(metadata, metadata_file)
+            metadata_url = str(root_url) + "/" + str(studentWallet ) + ".json"   
+            student.metadata_url = metadata_url
+            student.image_url = image_url
+            student.token_id = token_id
+            student.save()
+    elif request_type == "read":
+        account = Web3.toChecksumAddress(request.data["account"])
+        user = User.objects.get(account=account)
+        batch = Batch.objects.filter(user=user)
+        batch_list = []
+        if batch:
+            for i in batch:
+                batch_list.append({
+                    "id":i.id,
+                    "name":i.name,
+                    "description":i.decription,
+                    "batch_nft_image":i.batch_nft_image.url,
+                    "studentsFile":i.studentsFile.url
+                })
+        return Response({
+                
+                    "status":"Success",
+                    "response": batch_list
+                })  
+    elif request_type == "update":
+        account = Web3.toChecksumAddress(request.data["account"])
+        user=User.objects.get(account=account)
+        batch_id = request.data["batch_id"]
+        nft_image = request.data["nft_image"]
+        variables = json.loads(request.data["variables"])
+        qrAttribute=variables[0]
+        batch = Batch.objects.get(pk=batch_id)
+        batch.batch_nft_image = nft_image
+        batch.save()
+        file = batch.studentsFile.read().decode("utf-8")
+        csv_data = list(csv.reader(StringIO(file), delimiter=","))
+        students = Students.objects.filter(batch_name=batch)
+        for i in students.all():
+            # object to dictionary
+            i = i.__dict__
+            studentWallet=i["wallet_address"]
+            token_id=i["token_id"]
+           
+            
+            base_image = Image.open(batch.batch_nft_image.path)
+            width, height = base_image.size
+            text_box_height = int(int(qrAttribute['height']) * height / 100)
+            text_box_width = int(qrAttribute['width']) * width / 100
+            qr= qrcode.QRCode(version=None,box_size=3)
+            qr_data = "https:www.bitmemoirlatam.com/#/verify/"+batch.user.contract_address+"/"+str(token_id)
+            qr.add_data(qr_data)
+            qr.make(fit=True)
+            qr_image = qr.make_image(fill_color=qrAttribute['color'], back_color=(255, 255, 255, 0))
+            qr_image = qr_image.resize((text_box_height, text_box_height))
+            mask =qr_image.convert("L").point(lambda x: 255 - x)
+            base_image.paste(qr_image, (int(qrAttribute['x_pos'] * width / 100), int(qrAttribute['y_pos'] * height / 100 - text_box_height / 2)), mask=mask)
+            
+            base_image.show()
+            
+            root_dir=os.path.dirname(str(BASE_DIR) + "/media/" +batch.user.account+"/"+batch.name + "/certificates/")
+            root_url = os.path.dirname(str(BASE_URL) + "/media/"+batch.user.account+"/"+batch.name + "/certificates/")
+            if not os.path.exists(root_dir):
+                os.makedirs(root_dir)
+            image_location = str(root_dir) + "/" + str(studentWallet ) + ".png"
+            image_url =str(root_url) + "/" + str(studentWallet )+ ".png"
+            base_image.save(image_location)
+            
+        return Response({
+            "status":"Success",
+            "response":"updated"
+        })
+        
+        
+    elif request_type == "students":
+        account = Web3.toChecksumAddress(request.data["account"])
+        user = User.objects.get(account=account)
+        batch_id = request.data["batch_id"]
+        batch = Batch.objects.get(pk=batch_id)
+        students = Students.objects.filter(batch_name=batch)
+        students_list = []
+        for i in students.all():
+            # object to dictionary
+            i = i.__dict__
+            students_list.append({
+                "wallet_address":i["wallet_address"],
+                "token_id":i["token_id"],
+                "metadata_url":i["metadata_url"],
+                "image_url":i["image_url"]
+            })
+            
+        return Response({
+            "status":"Success",
+            "response":students_list
+        })
+        
+        
+    return Response(
+        {
+             "status": "Success",
+            "response": "issued",
+        }
+    )
+        
+        
+            
 
     
+    
+    
+    
+    
+    
+
+    
+    
+    
+    
+       
+    
+
+@api_view(["POST", "GET"])
+def issue_StudentNft(request):
+    server_url = request.META.get('HTTP_REFERER', '')
+    print(server_url)
+    account = Web3.toChecksumAddress(request.data["account"])
+    user = User.objects.get(account=account)    
+    subscription = Subscription.objects.get(user=user)
+    batch_id = request.data["batch_id"]
+    file = request.data["file"]
+    batch = Batch.objects.get(pk=batch_id)
+    
+    
+    
+    
+   
 def create_certificate_from_template(certificate, token_id,server_url):
     print(token_id)
     template = certificate.template

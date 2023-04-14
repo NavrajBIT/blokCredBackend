@@ -10,7 +10,8 @@ def sign_file(instance, filename):
 def idProofApprover(instance, filename):
     return "/".join([str(instance.name), "idProofApprover", filename])
 
-
+def batch_nft_image(instance, filename):
+    return "/".join([str(instance.user.account), "batch_nft_image", filename])
 
 def template_base_image(instance, filename):
     return "/".join([str(instance.user.account), "template_base_image", filename])
@@ -18,6 +19,9 @@ def template_base_image(instance, filename):
 
 def csv_file(instance, filename):
     return "/".join([str(instance.user.account), "csv_file", filename])
+
+def csv_fileNft(instance, filename):
+    return "/".join([str(instance.user.account), "csv_file_nft", filename])
 
 
 class Admin(models.Model):
@@ -127,4 +131,21 @@ class Approval_OTP(models.Model):
     order = models.ForeignKey(Certificate_Order, on_delete=models.CASCADE)
     otp = models.IntegerField()
     approved = models.BooleanField(default=False)
+    
+class Batch(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    name = models.CharField(max_length=50)
+    studentsFile = models.FileField(upload_to=csv_fileNft, blank=True, null=True)
+    decription = models.CharField(max_length=500)
+    batch_nft_image = models.ImageField(upload_to=batch_nft_image, blank=True, null=True)
 
+
+class Students(models.Model):
+    wallet_address = models.CharField(max_length=50)
+    batch_name = models.ForeignKey(Batch, on_delete=models.CASCADE)
+    image_url = models.URLField(max_length=500)
+    metadata_url = models.URLField(max_length=500)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    token_id = models.IntegerField(default=0)
+    
+    
