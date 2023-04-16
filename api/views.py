@@ -360,34 +360,51 @@ def get_nfts(request):
 
 def mint_souvenir(request):
     account = Web3.toChecksumAddress(request.data["account"])
-    image = request.data["image"]
+    image = Image.open(request.data["image"])
     asset_name = request.data["asset_name"]
     asset_description = request.data["asset_description"]
     recipient = request.data["recipient"]
     recipient_email = request.data["recipientEmail"]
     frame = request.data["frame"]
     user = User.objects.get(account=account)
+    token_id = str(get_token_id(user.contract_address))
+
+    qr_data = "https://bitmemoir.com/verify/" + user.contract_address + "/" + token_id
+    qr = qrcode.QRCode(box_size=4)
+    print("adding qr code")
+    qr.add_data(qr_data)
+    qr.make()
+    qr_image = qr.make_image(fill_color="black", back_color="white")
+    image_width, image_height = image.size
+    qr_width, qr_height = qr_image.size
+    # paste the QR code at the bottom-right corner of the image
+    image.paste(qr_image, (image_width - qr_width, image_height - qr_height))
     if frame == "":
         framed_image = image
     else:
         framed_image = add_frame(base_image=image, frame_name=frame, user=user)
+
+    # Save the modified image to memory
+    image_bytes = BytesIO()
+    framed_image.save(image_bytes, format='PNG')
+    image_bytes.seek(0)
+
     contract_address = user.contract_address
     metadata_url = save_souvenir(
         asset_name=asset_name,
         asset_description=asset_description,
-        image=framed_image,
+        image=image_bytes,
         user=user,
     )
 
     dir_path = str(BASE_DIR) + "/media/" + user.account + "/souvenirs/"
     filepath = dir_path + asset_name + ".png"
     files = open(filepath, "rb")
-    # files.seek(0)
 
+    # handle cases based on provided parameters
     if not recipient and not recipient_email:
             return Response({"status": "Failled"})
 
-    # handle cases based on provided parameters
     if recipient and recipient_email:
         print("calling 1")
         tx_hash = create_certificate(
@@ -409,6 +426,13 @@ def mint_souvenir(request):
         user.save()
     elif recipient_email:
         print("calling 3")
+        tx_hash = create_certificate(
+            account=user.account,
+            metadata=metadata_url,
+            contract_address=contract_address,
+        )
+        user.total_souvenirs = user.total_souvenirs + 1
+        user.save()
         tx_hash = None
         send_souvenir_email(recipient_email,files,sender_name=user.name)
     return Response({"status": "Success", "response": tx_hash})
@@ -873,14 +897,13 @@ def send_souvenir_email(recipient_email, files, sender_name):
     attachment_data = image_bytes.getvalue()
     attachment_type = "files/png"
 
-    subject = "NFT as a souvenir recieved."
+    subject = "Souvenir Received"
     message = (
-        "Hi"
-        + ",\nYou have recieved NFT as a souvenir from "
-        + sender_name
-        + ". \n"
+        f"Dear Sir/Madam,\n\nI hope this email finds you well. I am pleased to inform you that we have sent you a souvenir from {sender_name} as a token of our appreciation for your support.\n\nWe wanted to express our gratitude to you for being a valued customer, and for your continued trust in our services. The souvenir we have chosen is a small token of our appreciation and we hope you will enjoy it.\n\nWe sincerely appreciate and look forward to continuing our relationship with you in the future. Thank you for your support.\n"
     )
     sender = "support@beimagine.tech"
+    # sender = "Shubham2031@gmail.com"
+
     recipients = [recipient_email]
     email = EmailMessage(
         subject=subject,
@@ -890,7 +913,6 @@ def send_souvenir_email(recipient_email, files, sender_name):
     )
     email.attach(attachment_name, attachment_data, attachment_type)
     email.send(fail_silently=False)
-
 
 
 @api_view(["POST", "GET"])
