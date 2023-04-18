@@ -40,12 +40,11 @@ from datetime import datetime, timedelta,date
 import pytz
 import os
 from io import BytesIO
+from django.utils import timezone
 
 utc=pytz.UTC
 
-from django.utils import timezone
-from django.core import serializers
-from django.http import JsonResponse
+
 
 BASE_DIR = settings.BASE_DIR
 BASE_URL = "http://localhost:8000"
@@ -897,12 +896,13 @@ def send_souvenir_email(recipient_email, files, sender_name):
     attachment_data = image_bytes.getvalue()
     attachment_type = "files/png"
 
-    subject = "Souvenir Received"
+    subject = "A token of our appreciation"
     message = (
-        f"Dear Sir/Madam,\n\nI hope this email finds you well. I am pleased to inform you that we have sent you a souvenir from {sender_name} as a token of our appreciation for your support.\n\nWe wanted to express our gratitude to you for being a valued customer, and for your continued trust in our services. The souvenir we have chosen is a small token of our appreciation and we hope you will enjoy it.\n\nWe sincerely appreciate and look forward to continuing our relationship with you in the future. Thank you for your support.\n"
+        f"<p>You've received an NFT from {sender_name} as a token of gratitude for your love and support. Feel free to share it on social media and don’t forget to tag #{sender_name.replace(' ', '')}.</p>"
+        f"<p>Manage all your NFTs using BIT Wallet. <a href='https://bitmemoir.com/#/bitwalletpage'> Download now</a></p>"
     )
+    # sender = "shubham@beimagine.tech"
     sender = "support@beimagine.tech"
-    # sender = "Shubham2031@gmail.com"
 
     recipients = [recipient_email]
     email = EmailMessage(
@@ -912,8 +912,8 @@ def send_souvenir_email(recipient_email, files, sender_name):
         to=recipients,
     )
     email.attach(attachment_name, attachment_data, attachment_type)
+    email.content_subtype = 'html'
     email.send(fail_silently=False)
-
 
 @api_view(["POST", "GET"])
 def cert_template(request):
