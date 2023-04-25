@@ -14,4 +14,7 @@ urlpatterns = [
     path("payment", views.payment),
     path("nonEssCert", views.issue_nonEsseCert),
     path("subForDev", views.customSubscriptionForDev),
+    path("dnft", views.create_batch),
+    path("latinCerts", views.add_dnfts),
+  
 ]
