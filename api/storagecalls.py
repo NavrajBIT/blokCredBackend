@@ -101,11 +101,13 @@ def add_frame(base_image, frame_name, user):
     # print(response.json())
     # response.json
     dir_path = str(BASE_DIR) + "/media/" + user.account + "/frames/"
-    frame_filepath = dir_path + frame_name
+    frame_filepath = os.path.join(dir_path, frame_name)
     # frame_image = Image.open(response.raw)
     frame_image = Image.open(frame_filepath)
-    base_image = Image.open(base_image)
-    frame_image = frame_image.resize((1920, 1080))
-    base_image = base_image.resize((1920, 1080))
+    
+    frame_image = frame_image.resize(base_image.size)
+    # base_image = Image.open(base_image)
+    # frame_image = frame_image.resize((1920, 1080))
+    # base_image = base_image.resize((1920, 1080))
     base_image.paste(frame_image, (0, 0), frame_image)
     return base_image

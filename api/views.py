@@ -278,6 +278,8 @@ def kpi(request):
     for user in users:
         certificates = certificates + user.total_certificates
         souvenirs = souvenirs + user.total_souvenirs
+    print(certificates)
+    print(souvenirs)
     return Response(
         {
             "status": "Success",
@@ -362,7 +364,7 @@ def mint_souvenir(request):
     token_id = str(get_token_id(user.contract_address))
 
     qr_data = "https://bitmemoir.com/verify/" + user.contract_address + "/" + token_id
-    qr = qrcode.QRCode(box_size=4)
+    qr = qrcode.QRCode(box_size=3)
     print("adding qr code")
     qr.add_data(qr_data)
     qr.make()
@@ -370,7 +372,7 @@ def mint_souvenir(request):
     image_width, image_height = image.size
     qr_width, qr_height = qr_image.size
     # paste the QR code at the bottom-right corner of the image
-    image.paste(qr_image, (image_width - qr_width, image_height - qr_height))
+    image.paste(qr_image, (image_width - qr_width - 50, image_height - qr_height - 30))
     if frame == "":
         framed_image = image
     else:
@@ -1060,7 +1062,7 @@ def issue_certificates(request):
         order.certificates.add(certificate)
         order.save()
     if len(list(user.approvers.all())) == 0:
-        execute_certificate_order(order,server_url)
+        execute_certificate_order(order,server_url,user)
         return Response(
             {
                 "status": "Success",
@@ -1125,7 +1127,7 @@ def issue_nonEsseCert(request):
         )
         order.certificates.add(certificate)
         order.save()    
-    execute_certificate_order(order,server_url)
+    execute_certificate_order(order,server_url,user)
     return Response(
         {
             "status": "Success",
@@ -1194,7 +1196,7 @@ def create_certificate_from_template(certificate, token_id,server_url):
     return metadata_url
 
 
-def execute_certificate_order(order,server_url):      
+def execute_certificate_order(order,server_url,user):      
     for certificate in order.certificates.all():       
         create_certificate_from_template(certificate=certificate, token_id=0, server_url=server_url)
         metadata_url = certificate.metadata.url
@@ -1203,6 +1205,8 @@ def execute_certificate_order(order,server_url):
             metadata=metadata_url,
             contract_address=order.user.contract_address,
         )
+        user.total_certificates = user.total_certificates + 1
+        user.save() 
         print(token_id)
         print(metadata_url)
         create_certificate_from_template(certificate=certificate, token_id=token_id,server_url=server_url)
@@ -2095,7 +2099,7 @@ def create_batch(request):
             print(individual_list)
             return Response({
                 "status": "success",
-                "individual_list": individual_list
+                "response": individual_list
             })
 
         return Response(
