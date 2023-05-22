@@ -18,4 +18,5 @@ urlpatterns = [
     path("updatenft",views.update_reward_nft),
     path("viewnft",views.view_dnft_reward),
     path("claimreward",views.claim_reward),
+    path("loyaltyNFT",views.mint_reward_nft),
 ]

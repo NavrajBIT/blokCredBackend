@@ -101,11 +101,31 @@ def add_frame(base_image, frame_name, user):
     # print(response.json())
     # response.json
     dir_path = str(BASE_DIR) + "/media/" + user.account + "/frames/"
-    frame_filepath = dir_path + frame_name
+    frame_filepath = os.path.join(dir_path, frame_name)
     # frame_image = Image.open(response.raw)
     frame_image = Image.open(frame_filepath)
-    base_image = Image.open(base_image)
-    frame_image = frame_image.resize((1920, 1080))
-    base_image = base_image.resize((1920, 1080))
+
+    frame_image = frame_image.resize(base_image.size)
+    # base_image = Image.open(base_image)
+    # frame_image = frame_image.resize((1920, 1080))
+    # base_image = base_image.resize((1920, 1080))
     base_image.paste(frame_image, (0, 0), frame_image)
     return base_image
+
+
+
+def get_metadata_url_dnft(nameOfOrg,image,issue_date_nft,membership,expiry_date_memberShip='N/A',rewards=[]):
+    image_url = upload_image(image)
+    metadata = {
+        "name": nameOfOrg,
+        "image": image_url,
+        "issue_date_nft": str(issue_date_nft),
+        "membership": membership,
+        "expiry_date_memberShip": expiry_date_memberShip,
+        "rewards":rewards,
+    }
+    metadata_filepath = os.path.join(FILE_ROOT, "metadata.json")
+    with open(metadata_filepath, "w") as metadata_file:
+        json.dump(metadata, metadata_file)
+    metadata_url = upload_metadata(metadata_filepath)
+    return metadata_url

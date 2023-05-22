@@ -4,11 +4,11 @@ from django.shortcuts import render
 from django.http import HttpResponse, JsonResponse
 from django.forms.models import model_to_dict
 from .contractcalls import (
-    create_certificate,   
+    create_certificate,
     deploy_contract,
     get_token_id,
     get_contract_details,
-    check_payment
+    check_payment,
 )
 from .models import (
     Admin,
@@ -20,23 +20,31 @@ from .models import (
     Approver,
     Approval_OTP,
     Subscription,
-    Batch, 
+    Batch,
     Students,
+    Individual,
+    Loyalty_NFT,
     Individual,
     LoyaltyNFT
 )
 from .contract_config import config
-from .storagecalls import get_metadata_url, get_all_nfts, upload_image, add_frame
+from .storagecalls import (
+    get_metadata_url,
+    get_metadata_url_dnft,
+    get_all_nfts,
+    upload_image,
+    add_frame,
+)
 from web3 import Web3
 from PIL import Image, ImageDraw, ImageFont
 from django.conf import settings
 from pathlib import Path
 from django.core.files.storage import default_storage
-from django.core.mail import  EmailMessage
+from django.core.mail import EmailMessage
 from django.core.files.base import ContentFile
 from io import StringIO
 from io import BytesIO
-from datetime import datetime, timedelta,date
+from datetime import datetime, timedelta, date
 from django.utils import timezone
 import requests
 import json
@@ -47,15 +55,13 @@ import os
 import tempfile
 import pytz
 
-utc=pytz.UTC
-
+utc = pytz.UTC
 
 
 BASE_DIR = settings.BASE_DIR
 BASE_URL = "http://localhost:8000"
 # FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
-FONT_PATH='arial.ttf'
-
+FONT_PATH = "arial.ttf"
 
 
 def home_page(request):
@@ -123,7 +129,7 @@ user_self_keys = [
     "issuerName",
     "issuerDesignation",
     "country",
-    "noteSignByHigherAuth"    
+    "noteSignByHigherAuth",
 ]
 
 user_admin_keys = [
@@ -150,14 +156,18 @@ def user(request):
                 user_model = model_to_dict(user)
                 try:
                     user_model["idProof"] = BASE_URL + user_model["idProof"].url
-                    user_model["noteSignByHigherAuth"] = BASE_URL + user_model["noteSignByHigherAuth"].url
+                    user_model["noteSignByHigherAuth"] = (
+                        BASE_URL + user_model["noteSignByHigherAuth"].url
+                    )
                 except:
                     user_model["idProof"] = ""
-                    user_model["noteSignByHigherAuth"] =""
+                    user_model["noteSignByHigherAuth"] = ""
                 approvers = []
                 for approver in user.approvers.all():
                     approver_model = model_to_dict(approver)
-                    approver_model["idProofApprover"] = BASE_URL + approver_model["idProofApprover"].url
+                    approver_model["idProofApprover"] = (
+                        BASE_URL + approver_model["idProofApprover"].url
+                    )
                     approvers.append(approver_model)
                 user_model["approvers"] = approvers
                 all_users_sorted.append(user_model)
@@ -186,10 +196,10 @@ def user(request):
                 save_certificate_templates(user, request)
             elif item == "approvers":
                 user.approvers.clear()
-                approvers = json.loads(request.data["approvers"])            
-                print(approvers)   
+                approvers = json.loads(request.data["approvers"])
+                print(approvers)
                 for approver in approvers:
-                    num=1
+                    num = 1
                     new_approver = Approver.objects.create(
                         name=approver["name"],
                         designation=approver["designation"],
@@ -197,7 +207,7 @@ def user(request):
                         idProofApprover=request.data[f"idProofApprovers{num}"],
                     )
                     user.approvers.add(new_approver)
-                    num+=1
+                    num += 1
             else:
                 setattr(user, item, request.data[item])
             if item == "regId":
@@ -219,16 +229,16 @@ def user(request):
     user_model = model_to_dict(user)
     try:
         user_model["idProof"] = BASE_URL + user_model["idProof"].url
-        user_model["noteSignByHigherAuth"] = BASE_URL + user_model["noteSignByHigherAuth"].url
-        subsDetails= Subscription.objects.get(
-        id=user_model["subscription"]
+        user_model["noteSignByHigherAuth"] = (
+            BASE_URL + user_model["noteSignByHigherAuth"].url
         )
-        subsDetails=model_to_dict(subsDetails)
-        user_model["subscription"]=subsDetails
+        subsDetails = Subscription.objects.get(id=user_model["subscription"])
+        subsDetails = model_to_dict(subsDetails)
+        user_model["subscription"] = subsDetails
     except:
         user_model["idProof"] = ""
-        user_model["noteSignByHigherAuth"] =""
-        user_model["subscription"]=""
+        user_model["noteSignByHigherAuth"] = ""
+        user_model["subscription"] = ""
     approvers = []
     for approver in user.approvers.all():
         approver_model = model_to_dict(approver)
@@ -279,6 +289,8 @@ def kpi(request):
     for user in users:
         certificates = certificates + user.total_certificates
         souvenirs = souvenirs + user.total_souvenirs
+    print(certificates)
+    print(souvenirs)
     return Response(
         {
             "status": "Success",
@@ -363,7 +375,7 @@ def mint_souvenir(request):
     token_id = str(get_token_id(user.contract_address))
 
     qr_data = "https://bitmemoir.com/verify/" + user.contract_address + "/" + token_id
-    qr = qrcode.QRCode(box_size=4)
+    qr = qrcode.QRCode(box_size=3)
     print("adding qr code")
     qr.add_data(qr_data)
     qr.make()
@@ -371,7 +383,7 @@ def mint_souvenir(request):
     image_width, image_height = image.size
     qr_width, qr_height = qr_image.size
     # paste the QR code at the bottom-right corner of the image
-    image.paste(qr_image, (image_width - qr_width, image_height - qr_height))
+    image.paste(qr_image, (image_width - qr_width - 50, image_height - qr_height - 30))
     if frame == "":
         framed_image = image
     else:
@@ -379,7 +391,7 @@ def mint_souvenir(request):
 
     # Save the modified image to memory
     image_bytes = BytesIO()
-    framed_image.save(image_bytes, format='PNG')
+    framed_image.save(image_bytes, format="PNG")
     image_bytes.seek(0)
 
     contract_address = user.contract_address
@@ -396,7 +408,7 @@ def mint_souvenir(request):
 
     # handle cases based on provided parameters
     if not recipient and not recipient_email:
-            return Response({"status": "Failled"})
+        return Response({"status": "Failled"})
 
     if recipient and recipient_email:
         print("calling 1")
@@ -427,7 +439,7 @@ def mint_souvenir(request):
         user.total_souvenirs = user.total_souvenirs + 1
         user.save()
         tx_hash = None
-        send_souvenir_email(recipient_email,files,sender_name=user.name)
+        send_souvenir_email(recipient_email, files, sender_name=user.name)
     return Response({"status": "Success", "response": tx_hash})
 
 
@@ -622,18 +634,14 @@ def create_certificate_image(user, template, variable1, variable2, token_id):
         x, y, w, h = cert.textbbox(
             (0, 0),
             text["text"],
-            font=ImageFont.truetype(
-                FONT_PATH, int(base_font_size * text["font_size"])
-            ),
+            font=ImageFont.truetype(FONT_PATH, int(base_font_size * text["font_size"])),
         )
         print("got till here.....")
         cert.text(
             ((1080 - w) / 2, text["y_coord"]),
             text["text"],
             fill=certificate["fontColor"],
-            font=ImageFont.truetype(
-                FONT_PATH, int(base_font_size * text["font_size"])
-            ),
+            font=ImageFont.truetype(FONT_PATH, int(base_font_size * text["font_size"])),
         )
     x, y, w, h = cert.textbbox(
         (0, 0),
@@ -795,7 +803,7 @@ def save_frame(image, user):
 
 def save_souvenir(image, user, asset_name, asset_description):
     print("Saving souvenir")
-    asset_number = random.randrange(1000,1000000)
+    asset_number = random.randrange(1000, 1000000)
     print(asset_number)
     asset_name = str(asset_name).replace(" ", "_")
     asset_name = str(asset_name) + str(asset_number)
@@ -845,7 +853,6 @@ def verify_cert(request):
         return Response({"status": "Success", "response": "Invalid data."})
     is_verified = False
     print("checking user.")
-    
 
     if User.objects.filter(contract_address=contract_address).exists():
         print("user exists")
@@ -903,7 +910,7 @@ def send_cert_email(recipient, file, recipient_name, sender_name):
 def send_souvenir_email(recipient_email, files, sender_name):
     image_bytes = BytesIO(files.read())
     # Attach the image to the email message
-    attachment_name = 'nft_image.png'
+    attachment_name = "nft_image.png"
     attachment_data = image_bytes.getvalue()
     attachment_type = "files/png"
     subject = "A token of our appreciation"
@@ -921,7 +928,7 @@ def send_souvenir_email(recipient_email, files, sender_name):
         to=recipients,
     )
     email.attach(attachment_name, attachment_data, attachment_type)
-    email.content_subtype = 'html'
+    email.content_subtype = "html"
     email.send(fail_silently=False)
 
 
@@ -1020,9 +1027,9 @@ def cert_template(request):
 
 @api_view(["POST", "GET"])
 def issue_certificates(request):
-    server_url = request.META.get('HTTP_REFERER', '')
+    server_url = request.META.get("HTTP_REFERER", "")
     account = Web3.toChecksumAddress(request.data["account"])
-    user = User.objects.get(account=account)    
+    user = User.objects.get(account=account)
     subscription = Subscription.objects.get(user=user)
     template_id = request.data["template_id"]
     template = Template.objects.get(pk=template_id)
@@ -1031,7 +1038,7 @@ def issue_certificates(request):
     file = order.file.read().decode("utf-8")
     csv_data = list(csv.reader(StringIO(file), delimiter=","))
     cert_no = len(csv_data) - 1
-    if (cert_no >= user.nft_quota or subscription.end_Date <= timezone.now()):
+    if cert_no >= user.nft_quota or subscription.end_Date <= timezone.now():
         return Response(
             {
                 "status": "Failed",
@@ -1048,7 +1055,7 @@ def issue_certificates(request):
     for s_no in range(1, len(csv_data)):
         variables = {}
         for variable in variable_name_index.keys():
-            variables[variable] = csv_data[s_no][variable_name_index[variable]]        
+            variables[variable] = csv_data[s_no][variable_name_index[variable]]
         certificate = Certificate.objects.create(
             user=user,
             template=template,
@@ -1056,12 +1063,12 @@ def issue_certificates(request):
             email=csv_data[s_no][len(csv_data[0]) - 1],
             image_url="",
             metadata_url="",
-            variable_values=variables
+            variable_values=variables,
         )
         order.certificates.add(certificate)
         order.save()
     if len(list(user.approvers.all())) == 0:
-        execute_certificate_order(order,server_url)
+        execute_certificate_order(order, server_url, user)
         return Response(
             {
                 "status": "Success",
@@ -1081,14 +1088,14 @@ def issue_certificates(request):
                 "response": "pending approval",
             }
         )
-    
+
 
 @api_view(["POST", "GET"])
 def issue_nonEsseCert(request):
-    server_url = request.META.get('HTTP_REFERER', '')
+    server_url = request.META.get("HTTP_REFERER", "")
     print(server_url)
     account = Web3.toChecksumAddress(request.data["account"])
-    user = User.objects.get(account=account)    
+    user = User.objects.get(account=account)
     subscription = Subscription.objects.get(user=user)
     print("here --------------------")
     template_id = request.data["template_id"]
@@ -1098,7 +1105,7 @@ def issue_nonEsseCert(request):
     file = order.file.read().decode("utf-8")
     csv_data = list(csv.reader(StringIO(file), delimiter=","))
     cert_no = len(csv_data) - 1
-    if (cert_no >= user.nft_quota or subscription.end_Date <= timezone.now()):
+    if cert_no >= user.nft_quota or subscription.end_Date <= timezone.now():
         return Response(
             {
                 "status": "Failed",
@@ -1115,18 +1122,18 @@ def issue_nonEsseCert(request):
     for s_no in range(1, len(csv_data)):
         variables = {}
         for variable in variable_name_index.keys():
-            variables[variable] = csv_data[s_no][variable_name_index[variable]]   
-        print("Creating certificates..")     
+            variables[variable] = csv_data[s_no][variable_name_index[variable]]
+        print("Creating certificates..")
         certificate = Certificate.objects.create(
             user=user,
             template=template,
             recipient=Web3.toChecksumAddress(csv_data[s_no][len(csv_data[0]) - 2]),
             email=csv_data[s_no][len(csv_data[0]) - 1],
-            variable_values=variables
+            variable_values=variables,
         )
         order.certificates.add(certificate)
-        order.save()    
-    execute_certificate_order(order,server_url)
+        order.save()
+    execute_certificate_order(order, server_url, user)
     return Response(
         {
             "status": "Success",
@@ -1134,8 +1141,8 @@ def issue_nonEsseCert(request):
         }
     )
 
-    
-def create_certificate_from_template(certificate, token_id,server_url):
+
+def create_certificate_from_template(certificate, token_id, server_url):
     template = certificate.template
     variables = certificate.variable_values
     base_image = Image.open(template.base_image)
@@ -1162,19 +1169,32 @@ def create_certificate_from_template(certificate, token_id,server_url):
             print("Image size =", height)
             print("QR size ", int(variable.height * height / 100))
             qr = qrcode.QRCode(version=None, box_size=3)
-            qr_data = server_url+ "#/verify/" + template.user.contract_address + "/" + str(token_id)
+            qr_data = (
+                server_url
+                + "#/verify/"
+                + template.user.contract_address
+                + "/"
+                + str(token_id)
+            )
             print(qr_data)
             qr.add_data(qr_data)
             qr.make(fit=True)
             qr_image = qr.make_image(
-                    fill_color=variable.color, back_color=(255, 255, 255, 0)
+                fill_color=variable.color, back_color=(255, 255, 255, 0)
             )
             qr_image = qr_image.resize((text_box_height, text_box_height))
             mask = qr_image.convert("L").point(lambda x: 255 - x)
-            base_image.paste(qr_image, (int(variable.x_pos * width / 100), int(variable.y_pos * height / 100 - text_box_height / 2)), mask=mask)
-   
+            base_image.paste(
+                qr_image,
+                (
+                    int(variable.x_pos * width / 100),
+                    int(variable.y_pos * height / 100 - text_box_height / 2),
+                ),
+                mask=mask,
+            )
+
     image_io = BytesIO()
-    base_image.save(image_io, format='PNG')
+    base_image.save(image_io, format="PNG")
     image_file = ContentFile(image_io.getvalue())
     certificate.image.save("", image_file)
     asset_name = " ".join([template.name, "Issued by", template.user.name])
@@ -1195,21 +1215,27 @@ def create_certificate_from_template(certificate, token_id,server_url):
     return metadata_url
 
 
-def execute_certificate_order(order,server_url):      
-    for certificate in order.certificates.all():       
-        create_certificate_from_template(certificate=certificate, token_id=0, server_url=server_url)
+def execute_certificate_order(order, server_url, user):
+    for certificate in order.certificates.all():
+        create_certificate_from_template(
+            certificate=certificate, token_id=0, server_url=server_url
+        )
         metadata_url = certificate.metadata.url
         token_id = create_certificate(
             account=certificate.recipient,
             metadata=metadata_url,
             contract_address=order.user.contract_address,
         )
+        user.total_certificates = user.total_certificates + 1
+        user.save()
         print(token_id)
         print(metadata_url)
-        create_certificate_from_template(certificate=certificate, token_id=token_id,server_url=server_url)
+        create_certificate_from_template(
+            certificate=certificate, token_id=token_id, server_url=server_url
+        )
     order.fulfilled = True
     order.save()
-    
+
 
 def send_cert_approval_email(approval):
     subject = "Certificate issuance approval request."
@@ -1266,8 +1292,8 @@ def approve_order(request):
         all_approvals = Approval_OTP.objects.filter(order=order, approved=False)
         approvers = []
         for approval in all_approvals:
-            approver=model_to_dict(approval.approver)
-            approver['idProofApprover']=""
+            approver = model_to_dict(approval.approver)
+            approver["idProofApprover"] = ""
             approvers.append(approver)
         return Response(
             {
@@ -1284,7 +1310,7 @@ def approve_order(request):
                 "response": "Fulfilled",
             }
         )
-        
+
 
 @api_view(["POST", "GET"])
 def payment(request):
@@ -1296,24 +1322,27 @@ def payment(request):
     # duration_days = int(request.data["duration_days"])
     duration_days = 60
     start_Date = date.today()
-    end_Date = start_Date+timedelta(days=duration_days)
+    end_Date = start_Date + timedelta(days=duration_days)
     # amount, user_address = check_payment(tx_hash)
     if amount > 0:
         user = User.objects.get(account=Web3.toChecksumAddress(user_address))
         if amount >= 1000:
             user.nft_quota = user.nft_quota + 1000
             # user.save()
-            subs=Subscription.objects.create(
-                plan=plan, duration_days=duration_days,
-                start_Date=start_Date, end_Date=end_Date)
-            user.subscription =  subs
+            subs = Subscription.objects.create(
+                plan=plan,
+                duration_days=duration_days,
+                start_Date=start_Date,
+                end_Date=end_Date,
+            )
+            user.subscription = subs
             user.save()
     return Response(
         {
             "status": "Success",
             "response": "Fulfilled",
         }
-    )  
+    )
 
 
 @api_view(["POST", "GET"])
@@ -1321,7 +1350,7 @@ def customSubscriptionForDev(request):
     plan = request.data["plan"]
     duration_days = int(request.data["duration_days"])
     start_Date = date.today()
-    end_Date = start_Date+timedelta(days=duration_days)
+    end_Date = start_Date + timedelta(days=duration_days)
     user_address = request.data["user_address"]
     print(user_address)
     print(plan)
@@ -1332,28 +1361,34 @@ def customSubscriptionForDev(request):
         if amount >= 1000:
             user.nft_quota = user.nft_quota + 1000
             # user.save()
-            subs=Subscription.objects.create(
-                user=user,plan=plan, duration_days=duration_days,
-                start_Date=start_Date, end_Date=end_Date)
+            subs = Subscription.objects.create(
+                user=user,
+                plan=plan,
+                duration_days=duration_days,
+                start_Date=start_Date,
+                end_Date=end_Date,
+            )
             print(subs)
-            user.subscription =  subs
+            user.subscription = subs
             user.save()
     return Response(
         {
             "status": "Success",
             "response": "Fulfilled",
         }
-    )  
+    )
+
 
 def send_dnft_email(recipient, sender_name, link):
     subject = sender_name
     message = (
-        "Hi"        
+        "Hi"
         + ",\nYou have recieved a verified certificate from "
         + sender_name
         + ". \n"
         + "Click the link below to download the certificate. \n \n"
-        + link + "\n\n"
+        + link
+        + "\n\n"
         + "Thanks and Regards \n"
         + "Beyond Imagination Technologies \n"
         + "https:\\www.bitmemoirlatam.com"
@@ -1372,57 +1407,63 @@ def send_dnft_email(recipient, sender_name, link):
 @api_view(["POST", "GET"])
 def create_batch(request):
     try:
-        request_type= request.data["request_type"]
+        request_type = request.data["request_type"]
         if request_type == "create_batch":
             account = Web3.toChecksumAddress(request.data["account"])
-            name=request.data["name"]
-            description=request.data["description"]
+            name = request.data["name"]
+            description = request.data["description"]
             nft_image = request.data["nft_image"]
             StudentsFile = request.data["StudentsFile"]
             x_pos = request.data["x_pos"]
             y_pos = request.data["y_pos"]
-            user = User.objects.get(account=account)      
+            user = User.objects.get(account=account)
             batch = Batch.objects.create(
                 user=user,
                 name=name,
                 decription=description,
-                batch_nft_image =nft_image,
+                batch_nft_image=nft_image,
                 studentsFile=StudentsFile,
-                qr_x_pos = float(x_pos),
-                qr_y_pos = float(y_pos)
-            )    
+                qr_x_pos=float(x_pos),
+                qr_y_pos=float(y_pos),
+            )
             metadata = {
-            "name": name,
-            "description": description,
-            "image": str(batch.batch_nft_image.url),
+                "name": name,
+                "description": description,
+                "image": str(batch.batch_nft_image.url),
             }
             json_data = json.dumps(metadata).encode()
             content = ContentFile(json_data)
-            new_filename = str(random.randrange(1000,10000000)) + ".json"
+            new_filename = str(random.randrange(1000, 10000000)) + ".json"
             batch.batch_nft_metadata.save(new_filename, content)
             batch.save()
             print("Batch created ", model_to_dict(batch))
             file = batch.studentsFile.read().decode("utf-8")
-            csv_data = list(csv.reader(StringIO(file), delimiter=","))        
+            csv_data = list(csv.reader(StringIO(file), delimiter=","))
             for student_index in range(1, len(csv_data)):
-                studentWallet= Web3.toChecksumAddress(csv_data[student_index][1])
+                studentWallet = Web3.toChecksumAddress(csv_data[student_index][1])
                 token_id = get_token_id(contract_address=batch.user.contract_address)
                 print("Creating student...")
                 student = Students.objects.create(
-                    user = user,
-                    wallet_address = studentWallet,
-                    batch_name = batch,
-                    token_id = token_id         
+                    user=user,
+                    wallet_address=studentWallet,
+                    batch_name=batch,
+                    token_id=token_id,
                 )
                 try:
                     metadata = {
-                    "name": name,
-                    "description": description,
-                    "image": BASE_URL + user.account + "/dnfts/" + str(token_id) + ".png",
+                        "name": name,
+                        "description": description,
+                        "image": BASE_URL
+                        + user.account
+                        + "/dnfts/"
+                        + str(token_id)
+                        + ".png",
                     }
                     json_data = json.dumps(metadata).encode()
                     content = ContentFile(json_data)
-                    metadata_url = BASE_URL + user.account + "/dnfts/" + str(token_id) + ".json"                
+                    metadata_url = (
+                        BASE_URL + user.account + "/dnfts/" + str(token_id) + ".json"
+                    )
                     token_id = create_certificate(
                         account=studentWallet,
                         metadata=metadata_url,
@@ -1433,40 +1474,59 @@ def create_batch(request):
                     width, height = base_image.size
                     text_box_height = int(width * 0.1)
                     text_box_width = int(width * 0.1)
-                    qr = qrcode.QRCode(version=None,box_size=3)
-                    qr_data = "https:www.bitmemoirlatam.com/#/verify/"+batch.user.contract_address+"/"+str(token_id)
+                    qr = qrcode.QRCode(version=None, box_size=3)
+                    qr_data = (
+                        "https:www.bitmemoirlatam.com/#/verify/"
+                        + batch.user.contract_address
+                        + "/"
+                        + str(token_id)
+                    )
                     qr.add_data(qr_data)
                     qr.make(fit=True)
                     qr_image = qr.make_image(
-                            fill_color=(0, 0, 0), back_color=(255, 255, 255, 0)
+                        fill_color=(0, 0, 0), back_color=(255, 255, 255, 0)
                     )
                     qr_image = qr_image.resize((text_box_height, text_box_height))
                     mask = qr_image.convert("L").point(lambda x: 255 - x)
-                    base_image.paste(qr_image, (int(width * float(x_pos) / 100), int(height * float(y_pos) / 100)), mask=mask)                
+                    base_image.paste(
+                        qr_image,
+                        (
+                            int(width * float(x_pos) / 100),
+                            int(height * float(y_pos) / 100),
+                        ),
+                        mask=mask,
+                    )
                     print("Updating  student...")
                     output = BytesIO()
-                    base_image.save(output, format='PNG', quality=85)
+                    base_image.save(output, format="PNG", quality=85)
                     output.seek(0)
-                    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
+                    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
                         f.write(output.getvalue())
-                        student.nft_image.save( str(token_id) + ".png", f)
-                        student.metadata.save( str(token_id) + ".json", content)
+                        student.nft_image.save(str(token_id) + ".png", f)
+                        student.metadata.save(str(token_id) + ".json", content)
                         student.is_minted = True
                         student.save()
                     os.unlink(f.name)
                     try:
-                        studentEmail= csv_data[student_index][2]
+                        studentEmail = csv_data[student_index][2]
                         print(studentEmail)
                         student.email = studentEmail
                         student.save()
                         print(model_to_dict(student))
-                        send_dnft_email(recipient=str(student.email), sender_name = user.name, link = "https:www.bitmemoirlatam.com/#/verify/"+batch.user.contract_address+"/"+str(token_id))
+                        send_dnft_email(
+                            recipient=str(student.email),
+                            sender_name=user.name,
+                            link="https:www.bitmemoirlatam.com/#/verify/"
+                            + batch.user.contract_address
+                            + "/"
+                            + str(token_id),
+                        )
                     except Exception as e:
                         print("Email exception")
                         print(e)
                 except Exception as e:
                     print(e)
-                
+
         elif request_type == "read":
             account = Web3.toChecksumAddress(request.data["account"])
             user = User.objects.get(account=account)
@@ -1476,7 +1536,9 @@ def create_batch(request):
                 for i in batch:
                     students = []
                     if Students.objects.filter(user=user, batch_name=i).exists():
-                        student_objects = Students.objects.filter(user=user, batch_name=i)
+                        student_objects = Students.objects.filter(
+                            user=user, batch_name=i
+                        )
                         for student in student_objects:
                             student_model = model_to_dict(student)
                             try:
@@ -1484,35 +1546,35 @@ def create_batch(request):
                                 student_model["metadata"] = student.metadata.url
                                 student_model["batch_name"] = i.name
                                 student_model["timestamp"] = ""
-                                students.append(student_model)                    
+                                students.append(student_model)
                             except Exception as e:
                                 print(e)
                     try:
-                        batch_list.append({
-                            "id":i.id,
-                            "name":i.name,
-                            "description":i.decription,
-                            "batch_nft_image":i.batch_nft_image.url,
-                            
-                            "students": students                        
-                        })
+                        batch_list.append(
+                            {
+                                "id": i.id,
+                                "name": i.name,
+                                "description": i.decription,
+                                "batch_nft_image": i.batch_nft_image.url,
+                                "students": students,
+                            }
+                        )
                     except:
-                        batch_list.append({
-                            "id":i.id,
-                            "name":i.name,
-                            "description":i.decription,
-                            "batch_nft_image":"",
-                            "students": students                        
-                        })
-                
-            return Response({                    
-                        "status":"Success",
-                        "response": batch_list
-                    })
-              
+                        batch_list.append(
+                            {
+                                "id": i.id,
+                                "name": i.name,
+                                "description": i.decription,
+                                "batch_nft_image": "",
+                                "students": students,
+                            }
+                        )
+
+            return Response({"status": "Success", "response": batch_list})
+
         elif request_type == "update":
             account = Web3.toChecksumAddress(request.data["account"])
-            user=User.objects.get(account=account)
+            user = User.objects.get(account=account)
             batch_id = request.data["batch_id"]
             x_pos = request.data["x_pos"]
             y_pos = request.data["y_pos"]
@@ -1526,52 +1588,60 @@ def create_batch(request):
             csv_data = list(csv.reader(StringIO(file), delimiter=","))
             students = Students.objects.filter(batch_name=batch)
             for student in students.all():
-                studentWallet= student.wallet_address
-                token_id= student.token_id
+                studentWallet = student.wallet_address
+                token_id = student.token_id
                 base_image = Image.open(batch.batch_nft_image)
                 width, height = base_image.size
                 text_box_height = int(width * 0.1)
                 text_box_width = int(width * 0.1)
-                qr= qrcode.QRCode(version=None,box_size=3)
-                qr_data = "https:www.bitmemoirlatam.com/#/verify/"+batch.user.contract_address+"/"+str(token_id)
+                qr = qrcode.QRCode(version=None, box_size=3)
+                qr_data = (
+                    "https:www.bitmemoirlatam.com/#/verify/"
+                    + batch.user.contract_address
+                    + "/"
+                    + str(token_id)
+                )
                 qr.add_data(qr_data)
                 qr.make(fit=True)
-                qr_image = qr.make_image(fill_color=(0, 0, 0), back_color=(255, 255, 255, 0))
+                qr_image = qr.make_image(
+                    fill_color=(0, 0, 0), back_color=(255, 255, 255, 0)
+                )
                 qr_image = qr_image.resize((text_box_height, text_box_height))
-                mask =qr_image.convert("L").point(lambda x: 255 - x)
-                base_image.paste(qr_image, (int(width * float(x_pos) / 100), int(height * float(y_pos) / 100)), mask=mask)
+                mask = qr_image.convert("L").point(lambda x: 255 - x)
+                base_image.paste(
+                    qr_image,
+                    (int(width * float(x_pos) / 100), int(height * float(y_pos) / 100)),
+                    mask=mask,
+                )
                 print("Updating  student...")
                 output = BytesIO()
-                base_image.save(output, format='PNG', quality=85)
+                base_image.save(output, format="PNG", quality=85)
                 output.seek(0)
-                with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
+                with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
                     f.write(output.getvalue())
-                    student.nft_image.save( str(token_id) + ".png", f)
+                    student.nft_image.save(str(token_id) + ".png", f)
                     student.save()
                 os.unlink(f.name)
-                
-            return Response({
-                "status":"Success",
-                "response":"updated"
-            })
-        
+
+            return Response({"status": "Success", "response": "updated"})
+
         elif request_type == "retry":
             account = Web3.toChecksumAddress(request.data["account"])
-            user=User.objects.get(account=account)
+            user = User.objects.get(account=account)
             student_id = request.data["student_id"]
-            student = Students.objects.get(pk = student_id)
+            student = Students.objects.get(pk=student_id)
             batch = student.batch_name
             token_id = get_token_id(contract_address=batch.user.contract_address)
             metadata = {
-            "name": batch.name,
-            "description": batch.decription,
-            "image": BASE_URL + user.account + "/dnfts/" + str(token_id) + ".png",
+                "name": batch.name,
+                "description": batch.decription,
+                "image": BASE_URL + user.account + "/dnfts/" + str(token_id) + ".png",
             }
             json_data = json.dumps(metadata).encode()
             content = ContentFile(json_data)
-            metadata_url = BASE_URL + user.account + "/dnfts/" + str(token_id) + ".json"                
+            metadata_url = BASE_URL + user.account + "/dnfts/" + str(token_id) + ".json"
             token_id = create_certificate(
-                account= student.wallet_address,
+                account=student.wallet_address,
                 metadata=metadata_url,
                 contract_address=batch.user.contract_address,
             )
@@ -1580,24 +1650,36 @@ def create_batch(request):
             width, height = base_image.size
             text_box_height = int(width * 0.1)
             text_box_width = int(width * 0.1)
-            qr = qrcode.QRCode(version=None,box_size=3)
-            qr_data = "https:www.bitmemoirlatam.com/#/verify/"+batch.user.contract_address+"/"+str(token_id)
+            qr = qrcode.QRCode(version=None, box_size=3)
+            qr_data = (
+                "https:www.bitmemoirlatam.com/#/verify/"
+                + batch.user.contract_address
+                + "/"
+                + str(token_id)
+            )
             qr.add_data(qr_data)
             qr.make(fit=True)
             qr_image = qr.make_image(
-                    fill_color=(0, 0, 0), back_color=(255, 255, 255, 0)
+                fill_color=(0, 0, 0), back_color=(255, 255, 255, 0)
             )
             qr_image = qr_image.resize((text_box_height, text_box_height))
             mask = qr_image.convert("L").point(lambda x: 255 - x)
-            base_image.paste(qr_image, (int(width * float(batch.qr_x_pos) / 100), int(height * float(batch.qr_y_pos) / 100)), mask=mask)                
+            base_image.paste(
+                qr_image,
+                (
+                    int(width * float(batch.qr_x_pos) / 100),
+                    int(height * float(batch.qr_y_pos) / 100),
+                ),
+                mask=mask,
+            )
             print("Updating  student...")
             output = BytesIO()
-            base_image.save(output, format='PNG', quality=85)
+            base_image.save(output, format="PNG", quality=85)
             output.seek(0)
-            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
                 f.write(output.getvalue())
-                student.nft_image.save( str(token_id) + ".png", f)
-                student.metadata.save( str(token_id) + ".json", content)
+                student.nft_image.save(str(token_id) + ".png", f)
+                student.metadata.save(str(token_id) + ".json", content)
                 student.is_minted = True
                 student.save()
             os.unlink(f.name)
@@ -1615,10 +1697,10 @@ def create_batch(request):
             individual = Individual.objects.create(
                 user=user,
                 wallet_address=wallet_address,
-                nft_image = nft_image,
+                nft_image=nft_image,
                 token_id=token_id,
-                qr_x_pos = x_pos,
-                qr_y_pos = y_pos,
+                qr_x_pos=x_pos,
+                qr_y_pos=y_pos,
             )
             print("-------calling------")
             metadata = {
@@ -1628,7 +1710,9 @@ def create_batch(request):
             json_data = json.dumps(metadata).encode()
             content = ContentFile(json_data)
             try:
-                metadata_url = BASE_URL + user.account + "/dnfts/" + str(token_id) + ".json"
+                metadata_url = (
+                    BASE_URL + user.account + "/dnfts/" + str(token_id) + ".json"
+                )
                 token_id = create_certificate(
                     account=wallet_address,
                     metadata=metadata_url,
@@ -1641,7 +1725,12 @@ def create_batch(request):
                 y_pos = request.data["y_pos"]
                 text_box_height = int(width * 0.1)
                 qr = qrcode.QRCode(version=None, box_size=3)
-                qr_data = "https:www.bitmemoirlatam.com/#/verify/"+ individual.user.contract_address+"/"+str(token_id)
+                qr_data = (
+                    "https:www.bitmemoirlatam.com/#/verify/"
+                    + individual.user.contract_address
+                    + "/"
+                    + str(token_id)
+                )
                 qr.add_data(qr_data)
                 qr.make(fit=True)
                 qr_image = qr.make_image(
@@ -1652,14 +1741,14 @@ def create_batch(request):
                 base_image.paste(
                     qr_image,
                     (int(width * float(x_pos) / 100), int(height * float(y_pos) / 100)),
-                    mask=mask
+                    mask=mask,
                 )
-                
+
                 # Save updated NFT image and metadata to the database
                 output = BytesIO()
-                base_image.save(output, format='PNG', quality=85)
+                base_image.save(output, format="PNG", quality=85)
                 output.seek(0)
-                with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
+                with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
                     f.write(output.getvalue())
                     individual.nft_image.save(str(token_id) + ".png", f)
                     individual.metadata.save(str(token_id) + ".json", content)
@@ -1671,7 +1760,14 @@ def create_batch(request):
                     if student_email:
                         individual.email = student_email
                         individual.save()
-                        send_dnft_email(recipient=str(individual.email), sender_name=user.name, link="https://www.bitmemoirlatam.com/#/verify/" + user.contract_address + "/" + str(token_id))
+                        send_dnft_email(
+                            recipient=str(individual.email),
+                            sender_name=user.name,
+                            link="https://www.bitmemoirlatam.com/#/verify/"
+                            + user.contract_address
+                            + "/"
+                            + str(token_id),
+                        )
                 except Exception as e:
                     print("Email exception")
                     print(e)
@@ -1689,26 +1785,34 @@ def create_batch(request):
             width, height = base_image.size
             text_box_height = int(width * 0.1)
             qr = qrcode.QRCode(version=None, box_size=3)
-            qr_data = "https:www.bitmemoirlatam.com/#/verify/"+individual.user.contract_address+"/"+str(token_id)
+            qr_data = (
+                "https:www.bitmemoirlatam.com/#/verify/"
+                + individual.user.contract_address
+                + "/"
+                + str(token_id)
+            )
             qr.add_data(qr_data)
             qr.make(fit=True)
-            qr_image = qr.make_image(fill_color=(0, 0, 0), back_color=(255, 255, 255, 0))
+            qr_image = qr.make_image(
+                fill_color=(0, 0, 0), back_color=(255, 255, 255, 0)
+            )
             qr_image = qr_image.resize((text_box_height, text_box_height))
             mask = qr_image.convert("L").point(lambda x: 255 - x)
-            base_image.paste(qr_image, (int(width * float(x_pos) / 100), int(height * float(y_pos) / 100)), mask=mask)
+            base_image.paste(
+                qr_image,
+                (int(width * float(x_pos) / 100), int(height * float(y_pos) / 100)),
+                mask=mask,
+            )
             output = BytesIO()
-            base_image.save(output, format='PNG', quality=85)
+            base_image.save(output, format="PNG", quality=85)
             output.seek(0)
-            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
                 f.write(output.getvalue())
                 individual.nft_image.save(str(token_id) + ".png", f)
                 individual.save()
             os.unlink(f.name)
-            return Response({
-                "status": "Success",
-                "response": "updated"
-            })
-           
+            return Response({"status": "Success", "response": "updated"})
+
         elif request_type == "read_individual":
             account = Web3.toChecksumAddress(request.data["account"])
             user = User.objects.get(account=account)
@@ -1727,10 +1831,7 @@ def create_batch(request):
                 except Exception as e:
                     print(e)
             print(individual_list)
-            return Response({
-                "status": "success",
-                "individual_list": individual_list
-            })       
+            return Response({"status": "success", "individual_list": individual_list})
     except Exception as e:
         print("Printing net exception...")
         print(e)
@@ -1739,57 +1840,63 @@ def create_batch(request):
 @api_view(["POST", "GET"])
 def create_batch(request):
     try:
-        request_type= request.data["request_type"]
+        request_type = request.data["request_type"]
         if request_type == "create_batch":
             account = Web3.toChecksumAddress(request.data["account"])
-            name=request.data["name"]
-            description=request.data["description"]
+            name = request.data["name"]
+            description = request.data["description"]
             nft_image = request.data["nft_image"]
             StudentsFile = request.data["StudentsFile"]
             x_pos = request.data["x_pos"]
             y_pos = request.data["y_pos"]
-            user = User.objects.get(account=account)      
+            user = User.objects.get(account=account)
             batch = Batch.objects.create(
                 user=user,
                 name=name,
                 decription=description,
-                batch_nft_image =nft_image,
+                batch_nft_image=nft_image,
                 studentsFile=StudentsFile,
-                qr_x_pos = float(x_pos),
-                qr_y_pos = float(y_pos)
-            )    
+                qr_x_pos=float(x_pos),
+                qr_y_pos=float(y_pos),
+            )
             metadata = {
-            "name": name,
-            "description": description,
-            "image": str(batch.batch_nft_image.url),
+                "name": name,
+                "description": description,
+                "image": str(batch.batch_nft_image.url),
             }
             json_data = json.dumps(metadata).encode()
             content = ContentFile(json_data)
-            new_filename = str(random.randrange(1000,10000000)) + ".json"
+            new_filename = str(random.randrange(1000, 10000000)) + ".json"
             batch.batch_nft_metadata.save(new_filename, content)
             batch.save()
             print("Batch created ", model_to_dict(batch))
             file = batch.studentsFile.read().decode("utf-8")
-            csv_data = list(csv.reader(StringIO(file), delimiter=","))        
+            csv_data = list(csv.reader(StringIO(file), delimiter=","))
             for student_index in range(1, len(csv_data)):
-                studentWallet= Web3.toChecksumAddress(csv_data[student_index][1])
+                studentWallet = Web3.toChecksumAddress(csv_data[student_index][1])
                 token_id = get_token_id(contract_address=batch.user.contract_address)
                 print("Creating student...")
                 student = Students.objects.create(
-                    user = user,
-                    wallet_address = studentWallet,
-                    batch_name = batch,
-                    token_id = token_id         
+                    user=user,
+                    wallet_address=studentWallet,
+                    batch_name=batch,
+                    token_id=token_id,
                 )
                 try:
                     metadata = {
-                    "name": name,
-                    "description": description,
-                    "image": "https:www.bitmemoirlatam.com/#/verify/" + user.account + "/dnfts/" + str(token_id) + ".png",
+                        "name": name,
+                        "description": description,
+                        "image": BASE_URL
+                        + user.account
+                        + "/dnfts/"
+                        + str(token_id)
+                        + ".png",
                     }
                     json_data = json.dumps(metadata).encode()
                     content = ContentFile(json_data)
-                    metadata_url = "https:www.bitmemoirlatam.com/#/verify/" + user.account + "/dnfts/" + str(token_id) + ".json"                
+                    metadata_url = (
+                        BASE_URL + user.account + "/dnfts/" + str(token_id) + ".json"
+                    )
                     token_id = create_certificate(
                         account=studentWallet,
                         metadata=metadata_url,
@@ -1800,40 +1907,59 @@ def create_batch(request):
                     width, height = base_image.size
                     text_box_height = int(width * 0.1)
                     text_box_width = int(width * 0.1)
-                    qr = qrcode.QRCode(version=None,box_size=3)
-                    qr_data = "https:www.bitmemoirlatam.com/#/verify/"+batch.user.contract_address+"/"+str(token_id)
+                    qr = qrcode.QRCode(version=None, box_size=3)
+                    qr_data = (
+                        "https:www.bitmemoirlatam.com/#/verify/"
+                        + batch.user.contract_address
+                        + "/"
+                        + str(token_id)
+                    )
                     qr.add_data(qr_data)
                     qr.make(fit=True)
                     qr_image = qr.make_image(
-                            fill_color=(0, 0, 0), back_color=(255, 255, 255, 0)
+                        fill_color=(0, 0, 0), back_color=(255, 255, 255, 0)
                     )
                     qr_image = qr_image.resize((text_box_height, text_box_height))
                     mask = qr_image.convert("L").point(lambda x: 255 - x)
-                    base_image.paste(qr_image, (int(width * float(x_pos) / 100), int(height * float(y_pos) / 100)), mask=mask)                
+                    base_image.paste(
+                        qr_image,
+                        (
+                            int(width * float(x_pos) / 100),
+                            int(height * float(y_pos) / 100),
+                        ),
+                        mask=mask,
+                    )
                     print("Updating  student...")
                     output = BytesIO()
-                    base_image.save(output, format='PNG', quality=85)
+                    base_image.save(output, format="PNG", quality=85)
                     output.seek(0)
-                    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
+                    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
                         f.write(output.getvalue())
-                        student.nft_image.save( str(token_id) + ".png", f)
-                        student.metadata.save( str(token_id) + ".json", content)
+                        student.nft_image.save(str(token_id) + ".png", f)
+                        student.metadata.save(str(token_id) + ".json", content)
                         student.is_minted = True
                         student.save()
                     os.unlink(f.name)
                     try:
-                        studentEmail= csv_data[student_index][2]
+                        studentEmail = csv_data[student_index][2]
                         print(studentEmail)
                         student.email = studentEmail
                         student.save()
                         print(model_to_dict(student))
-                        send_dnft_email(recipient=str(student.email), sender_name = user.name, link = "https:www.bitmemoirlatam.com/#/verify/"+batch.user.contract_address+"/"+str(token_id))
+                        send_dnft_email(
+                            recipient=str(student.email),
+                            sender_name=user.name,
+                            link="https:www.bitmemoirlatam.com/#/verify/"
+                            + batch.user.contract_address
+                            + "/"
+                            + str(token_id),
+                        )
                     except Exception as e:
                         print("Email exception")
                         print(e)
                 except Exception as e:
                     print(e)
-                
+
         elif request_type == "read":
             account = Web3.toChecksumAddress(request.data["account"])
             user = User.objects.get(account=account)
@@ -1843,7 +1969,9 @@ def create_batch(request):
                 for i in batch:
                     students = []
                     if Students.objects.filter(user=user, batch_name=i).exists():
-                        student_objects = Students.objects.filter(user=user, batch_name=i)
+                        student_objects = Students.objects.filter(
+                            user=user, batch_name=i
+                        )
                         for student in student_objects:
                             student_model = model_to_dict(student)
                             try:
@@ -1851,19 +1979,32 @@ def create_batch(request):
                                 student_model["metadata"] = student.metadata.url
                                 student_model["batch_name"] = i.name
                                 student_model["timestamp"] = ""
-                                students.append(student_model)                    
+                                students.append(student_model)
                             except Exception as e:
                                 print(e)
                     try:
-                        batch_list.append({
-                            "id":i.id,
-                            "name":i.name,
-                            "description":i.decription,
-                            "batch_nft_image":i.batch_nft_image.url,
-                            
-                            "students": students                        
-                        })
+                        batch_list.append(
+                            {
+                                "id": i.id,
+                                "name": i.name,
+                                "description": i.decription,
+                                "batch_nft_image": i.batch_nft_image.url,
+                                "students": students,
+                            }
+                        )
                     except:
+                        batch_list.append(
+                            {
+                                "id": i.id,
+                                "name": i.name,
+                                "description": i.decription,
+                                "batch_nft_image": "",
+                                "students": students,
+                            }
+                        )
+
+            return Response({"status": "Success", "response": batch_list})
+
                         batch_list.append({
                             "id":i.id,
                             "name":i.name,
@@ -1902,7 +2043,7 @@ def create_batch(request):
               
         elif request_type == "update":
             account = Web3.toChecksumAddress(request.data["account"])
-            user=User.objects.get(account=account)
+            user = User.objects.get(account=account)
             batch_id = request.data["batch_id"]
             x_pos = request.data["x_pos"]
             y_pos = request.data["y_pos"]
@@ -1916,52 +2057,60 @@ def create_batch(request):
             csv_data = list(csv.reader(StringIO(file), delimiter=","))
             students = Students.objects.filter(batch_name=batch)
             for student in students.all():
-                studentWallet= student.wallet_address
-                token_id= student.token_id
+                studentWallet = student.wallet_address
+                token_id = student.token_id
                 base_image = Image.open(batch.batch_nft_image)
                 width, height = base_image.size
                 text_box_height = int(width * 0.1)
                 text_box_width = int(width * 0.1)
-                qr= qrcode.QRCode(version=None,box_size=3)
-                qr_data = "https:www.bitmemoirlatam.com/#/verify/"+batch.user.contract_address+"/"+str(token_id)
+                qr = qrcode.QRCode(version=None, box_size=3)
+                qr_data = (
+                    "https:www.bitmemoirlatam.com/#/verify/"
+                    + batch.user.contract_address
+                    + "/"
+                    + str(token_id)
+                )
                 qr.add_data(qr_data)
                 qr.make(fit=True)
-                qr_image = qr.make_image(fill_color=(0, 0, 0), back_color=(255, 255, 255, 0))
+                qr_image = qr.make_image(
+                    fill_color=(0, 0, 0), back_color=(255, 255, 255, 0)
+                )
                 qr_image = qr_image.resize((text_box_height, text_box_height))
-                mask =qr_image.convert("L").point(lambda x: 255 - x)
-                base_image.paste(qr_image, (int(width * float(x_pos) / 100), int(height * float(y_pos) / 100)), mask=mask)
+                mask = qr_image.convert("L").point(lambda x: 255 - x)
+                base_image.paste(
+                    qr_image,
+                    (int(width * float(x_pos) / 100), int(height * float(y_pos) / 100)),
+                    mask=mask,
+                )
                 print("Updating  student...")
                 output = BytesIO()
-                base_image.save(output, format='PNG', quality=85)
+                base_image.save(output, format="PNG", quality=85)
                 output.seek(0)
-                with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
+                with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
                     f.write(output.getvalue())
-                    student.nft_image.save( str(token_id) + ".png", f)
+                    student.nft_image.save(str(token_id) + ".png", f)
                     student.save()
                 os.unlink(f.name)
-                
-            return Response({
-                "status":"Success",
-                "response":"updated"
-            })
-        
+
+            return Response({"status": "Success", "response": "updated"})
+
         elif request_type == "retry":
             account = Web3.toChecksumAddress(request.data["account"])
-            user=User.objects.get(account=account)
+            user = User.objects.get(account=account)
             student_id = request.data["student_id"]
-            student = Students.objects.get(pk = student_id)
+            student = Students.objects.get(pk=student_id)
             batch = student.batch_name
             token_id = get_token_id(contract_address=batch.user.contract_address)
             metadata = {
-            "name": batch.name,
-            "description": batch.decription,
-            "image": "https:www.bitmemoirlatam.com/#/verify/" + user.account + "/dnfts/" + str(token_id) + ".png",
+                "name": batch.name,
+                "description": batch.decription,
+                "image": BASE_URL + user.account + "/dnfts/" + str(token_id) + ".png",
             }
             json_data = json.dumps(metadata).encode()
             content = ContentFile(json_data)
-            metadata_url = "https:www.bitmemoirlatam.com/#/verify/" + user.account + "/dnfts/" + str(token_id) + ".json"                
+            metadata_url = BASE_URL + user.account + "/dnfts/" + str(token_id) + ".json"
             token_id = create_certificate(
-                account= student.wallet_address,
+                account=student.wallet_address,
                 metadata=metadata_url,
                 contract_address=batch.user.contract_address,
             )
@@ -1970,28 +2119,39 @@ def create_batch(request):
             width, height = base_image.size
             text_box_height = int(width * 0.1)
             text_box_width = int(width * 0.1)
-            qr = qrcode.QRCode(version=None,box_size=3)
-            qr_data = "https:www.bitmemoirlatam.com/#/verify/"+batch.user.contract_address+"/"+str(token_id)
+            qr = qrcode.QRCode(version=None, box_size=3)
+            qr_data = (
+                "https:www.bitmemoirlatam.com/#/verify/"
+                + batch.user.contract_address
+                + "/"
+                + str(token_id)
+            )
             qr.add_data(qr_data)
             qr.make(fit=True)
             qr_image = qr.make_image(
-                    fill_color=(0, 0, 0), back_color=(255, 255, 255, 0)
+                fill_color=(0, 0, 0), back_color=(255, 255, 255, 0)
             )
             qr_image = qr_image.resize((text_box_height, text_box_height))
             mask = qr_image.convert("L").point(lambda x: 255 - x)
-            base_image.paste(qr_image, (int(width * float(batch.qr_x_pos) / 100), int(height * float(batch.qr_y_pos) / 100)), mask=mask)                
+            base_image.paste(
+                qr_image,
+                (
+                    int(width * float(batch.qr_x_pos) / 100),
+                    int(height * float(batch.qr_y_pos) / 100),
+                ),
+                mask=mask,
+            )
             print("Updating  student...")
             output = BytesIO()
-            base_image.save(output, format='PNG', quality=85)
+            base_image.save(output, format="PNG", quality=85)
             output.seek(0)
-            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
                 f.write(output.getvalue())
-                student.nft_image.save( str(token_id) + ".png", f)
-                student.metadata.save( str(token_id) + ".json", content)
+                student.nft_image.save(str(token_id) + ".png", f)
+                student.metadata.save(str(token_id) + ".json", content)
                 student.is_minted = True
                 student.save()
             os.unlink(f.name)
-
         elif request_type == "create_individual":
             account = Web3.toChecksumAddress(request.data["account"])
             wallet_address = Web3.toChecksumAddress(request.data["name"])
@@ -2005,10 +2165,10 @@ def create_batch(request):
             individual = Individual.objects.create(
                 user=user,
                 wallet_address=wallet_address,
-                nft_image = nft_image,
+                # nft_image = nft_image,
                 token_id=token_id,
-                qr_x_pos = x_pos,
-                qr_y_pos = y_pos,
+                qr_x_pos=x_pos,
+                qr_y_pos=y_pos,
             )
             print("-------calling------")
             metadata = {
@@ -2018,7 +2178,9 @@ def create_batch(request):
             json_data = json.dumps(metadata).encode()
             content = ContentFile(json_data)
             try:
-                metadata_url = BASE_URL + user.account + "/dnfts/" + str(token_id) + ".json"
+                metadata_url = metadata_url = (
+                    BASE_URL + user.account + "/dnfts/" + str(token_id) + ".json"
+                )
                 token_id = create_certificate(
                     account=wallet_address,
                     metadata=metadata_url,
@@ -2031,7 +2193,12 @@ def create_batch(request):
                 y_pos = request.data["y_pos"]
                 text_box_height = int(width * 0.1)
                 qr = qrcode.QRCode(version=None, box_size=3)
-                qr_data = "https:www.bitmemoirlatam.com/#/verify/"+ individual.user.contract_address+"/"+str(token_id)
+                qr_data = (
+                    "https:www.bitmemoirlatam.com/#/verify/"
+                    + individual.user.contract_address
+                    + "/"
+                    + str(token_id)
+                )
                 qr.add_data(qr_data)
                 qr.make(fit=True)
                 qr_image = qr.make_image(
@@ -2042,14 +2209,14 @@ def create_batch(request):
                 base_image.paste(
                     qr_image,
                     (int(width * float(x_pos) / 100), int(height * float(y_pos) / 100)),
-                    mask=mask
+                    mask=mask,
                 )
-                
+
                 # Save updated NFT image and metadata to the database
                 output = BytesIO()
-                base_image.save(output, format='PNG', quality=85)
+                base_image.save(output, format="PNG", quality=85)
                 output.seek(0)
-                with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
+                with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
                     f.write(output.getvalue())
                     individual.nft_image.save(str(token_id) + ".png", f)
                     individual.metadata.save(str(token_id) + ".json", content)
@@ -2061,13 +2228,21 @@ def create_batch(request):
                     if student_email:
                         individual.email = student_email
                         individual.save()
-                        send_dnft_email(recipient=str(individual.email), sender_name=user.name, link="https://www.bitmemoirlatam.com/#/verify/" + user.contract_address + "/" + str(token_id))
+                        send_dnft_email(
+                            recipient=str(individual.email),
+                            sender_name=user.name,
+                            link="https://www.bitmemoirlatam.com/#/verify/"
+                            + user.contract_address
+                            + "/"
+                            + str(token_id),
+                        )
                 except Exception as e:
                     print("Email exception")
                     print(e)
             except Exception as e:
                 print(e)
             return Response({"status": "success"})
+
         elif request_type == "update_nft":
             print("Updating NFT...")
             account = Web3.toChecksumAddress(request.data["account"])
@@ -2081,26 +2256,34 @@ def create_batch(request):
             width, height = base_image.size
             text_box_height = int(width * 0.1)
             qr = qrcode.QRCode(version=None, box_size=3)
+            qr_data = (
+                "https:www.bitmemoirlatam.com/#/verify/"
+                + user.contract_address
+                + "/"
+                + str(token_id)
+            )
             qr_data = "https:www.bitmemoirlatam.com/#/verify/"+user.contract_address+"/"+str(token_id)
             qr.add_data(qr_data)
             qr.make(fit=True)
-            qr_image = qr.make_image(fill_color=(0, 0, 0), back_color=(255, 255, 255, 0))
+            qr_image = qr.make_image(
+                fill_color=(0, 0, 0), back_color=(255, 255, 255, 0)
+            )
             qr_image = qr_image.resize((text_box_height, text_box_height))
             mask = qr_image.convert("L").point(lambda x: 255 - x)
-            base_image.paste(qr_image, (int(width * float(x_pos) / 100), int(height * float(y_pos) / 100)), mask=mask)
+            base_image.paste(
+                qr_image,
+                (int(width * float(x_pos) / 100), int(height * float(y_pos) / 100)),
+                mask=mask,
+            )
             output = BytesIO()
-            base_image.save(output, format='PNG', quality=85)
+            base_image.save(output, format="PNG", quality=85)
             output.seek(0)
-            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
                 f.write(output.getvalue())
                 individual.nft_image.save(str(token_id) + ".png", f)
                 individual.save()
             os.unlink(f.name)
-            return Response({
-                "status": "Success",
-                "response": "updated"
-            })
-           
+            return Response({"status": "Success", "response": "updated"})
         elif request_type == "read_individual":
             account = Web3.toChecksumAddress(request.data["account"])
             user = User.objects.get(account=account)
@@ -2119,10 +2302,25 @@ def create_batch(request):
                 except Exception as e:
                     print(e)
             print(individual_list)
-            return Response({
-                "status": "success",
-                "response": individual_list
-            })
+            return Response({"status": "success", "response": individual_list})
+
+        elif request_type == "read1":
+            account = Web3.toChecksumAddress(request.data["account"])
+            user = User.objects.get(account=account)
+            individuals = list(Individual.objects.filter(user=user))
+            print(individuals)
+            individual_list = []
+            for individual in individuals:
+                individual_model = model_to_dict(individual)
+                try:
+                    individual_model["nft_image"] = individual.nft_image.url
+                    individual_model["metadata"] = individual.metadata.url
+                    individual_model["timestamp"] = individual.timestamp
+                    individual_list.append(individual_model)
+                except Exception as e:
+                    print(e)
+
+            return Response({"status": "Success", "response": individual_list})
 
         return Response(
             {
@@ -2130,497 +2328,212 @@ def create_batch(request):
                 "response": "issued",
             }
         )
-    
-    
-        
-    
     except Exception as e:
         print("Printing net exception...")
         print(e)
-    
-    
-    
-    
-# @api_view(["POST", "GET"])
-# def mint_reward_nft(request):
-#     try:
-#         request_type = request.data["request_type"]
-        
-#         if request_type == "mint_nft":
-#             account = Web3.toChecksumAddress(request.data["account"])
-#             receiver = Web3.toChecksumAddress(request.data["receiver"])
-#             image = request.data["image"]
-#             user= User.objects.get(account=account)
-#             token_id = get_token_id(contract_address=user.contract_address)
-#             image_size = image.size/ 1024/ 1024
-#             if True:
-#                 nameOfOrg= request.data["nameOfOrg"]
-#                 isMembership = request.data["isMembership"]
-#                 membership = request.data["membership"]
-#                 issue_date_nft = date.today()
-#                 isReward= request.data["isReward"]
-#                 reward= request.data["reward"]
-#                 issue_date_reward= str(date.today())
-#                 expiray_date_of_reward= request.data["expiray_date_of_reward"]
-#                 expiry_date_of_membership = request.data["expiry_date_of_membership"]
-#                 loyaltyNFT = LoyaltyNFT.objects.create(
-#                     user=user,
-#                     token_id=token_id,
-#                     nft_image=image,
-#                     wallet_address=receiver,
-#                 )
-                
-#                 try:
-                    
-#                     if isMembership == "true" and isReward== 'true':
-#                         print("isMembership and isReward......")
-#                         metadata={
-#                             "nameOfOrg":nameOfOrg,
-#                             "image": BASE_URL + user.account + "/dnfts/" + str(token_id) + ".png",
-#                             "issue_date_nft":issue_date_nft,
-#                             "membership":membership,
-#                             "expiry_date_memberShip":expiry_date_of_membership,
-#                             "rewards":[
-#                                 {
-#                                     "reward":reward,
-#                                     "issue_date_reward":issue_date_reward,
-#                                     "expiry_date_reward":expiray_date_of_reward,
-#                                     'is_claimed':False,
-#                                 }
-#                             ]
-#                         }
-                        
-#                         json_data = json.dumps(metadata)
-#                         content =ContentFile(json_data)
-                        
-#                         try:
-#                             metadata_url = BASE_URL + user.account + "/dnfts/" + str(token_id) + ".json"
-#                             token_id = create_certificate(
-#                                 account=receiver,
-#                                 metadata=metadata_url,
-#                                 contract_address=user.contract_address,
-#                             )
-#                             print("token_id",token_id)
-                            
-#                             #Save metadata
-#                             output = BytesIO()
-#                             output.seek(0)
-#                             with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
-#                                 f.write(output.getvalue())
-#                                 loyaltyNFT.metadata.save(str(token_id) + ".json", content)
-#                                 loyaltyNFT.save()
-                                
-#                             os.unlink(f.name)
-                            
-#                             try:
-#                                 student_email = request.data.get("email")
-#                                 if student_email:
-#                                     individual.email = student_email
-#                                     individual.save()
-#                                     send_dnft_email(recipient=str(individual.email), sender_name=user.name, link="https://www.bitmemoirlatam.com/#/verify/" + user.contract_address + "/" + str(token_id))
-#                             except Exception as e:
-#                                 print("Email exception")
-#                                 print(e)
-#                         expect Exception as e:
-#                             print(e)
-                            
-#                         return Response({"status": "Success", "response": token_id})
-                    
-#                     elif isMembership == 'true':
-#                         print("isMembership......")
-#                         contract_address = config['contract_address']
-                        
-#                         metadata = {
-#                             "nameOfOrg": nameOfOrg,
-#                             "image": BASE_URL + user.account + "/dnfts/" + str(token_id) + ".png",
-#                             "issue_date_nft": issue_date_nft,
-#                             "membership": membership,
-#                             "expiry_date_memberShip": expiry_date_of_membership,
-                            
-#                         }
-#                         json_data = json.dumps(metadata)
-#                         content = ContentFile(json_data)
-#                         try:
-#                             metadata_url = BASE_URL + user.account + "/dnfts/" + str(token_id) + ".json"
-#                             token_id = create_certificate(
-#                                 account=receiver,
-#                                 metadata=metadata_url,
-#                                 contract_address=user.contract_address,
-#                             )
-#                             print("token_id",token_id)
-                            
-#                             #Save metadata
-#                             output = BytesIO()
-#                             output.seek(0)
-#                             with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
-#                                 f.write(output.getvalue())
-#                                 loyaltyNFT.metadata.save(str(token_id) + ".json", content)
-#                                 loyaltyNFT.save()
-                                
-#                             os.unlink(f.name)
-                            
-#                             try:
-#                                 student_email = request.data.get("email")
-#                                 if student_email:
-#                                     individual.email = student_email
-#                                     individual.save()
-#                                     send_dnft_email(recipient=str(individual.email), sender_name=user.name, link="https://www.bitmemoirlatam.com/#/verify/" + user.contract_address + "/" + str(token_id))
-#                             except Exception as e:
-#                                 print("Email exception")
-#                                 print(e)
-#                         expect Exception as e:
-#                             print(e)
-                            
-#                         return Response({"status": "Success", "response": token_id})
-                
-#                     elif isReward == 'true':
-#                         print("isReward......")
-                        
-#                         metadata {
-#                             "nameOfOrg": nameOfOrg,
-#                             "image": BASE_URL + user.account + "/dnfts/" + str(token_id) + ".png",
-#                             "issue_date_nft": issue_date_nft,
-#                             "rewards": [
-#                                 {
-#                                     "reward": reward,
-#                                     "issue_date_reward": issue_date_reward,
-#                                     "expiry_date_reward": expiray_date_of_reward,
-#                                     'is_claimed': False,
-#                                 }
-#                             ]
-                            
-#                         }
-#                         json_data = json.dumps(metadata)
-#                         content = ContentFile(json_data)
-#                         try:
-#                             metadata_url = BASE_URL + user.account + "/dnfts/" + str(token_id) + ".json"
-#                             token_id = create_certificate(
-#                                 account=receiver,
-#                                 metadata=metadata_url,
-#                                 contract_address=user.contract_address,
-#                             )
-#                             print("token_id",token_id)
-                            
-#                             #Save metadata
-#                             output = BytesIO()
-#                             output.seek(0)
-#                             with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
-#                                 f.write(output.getvalue())
-#                                 loyaltyNFT.metadata.save(str(token_id) + ".json", content)
-#                                 loyaltyNFT.save()
-                                
-#                             os.unlink(f.name)
-                            
-#                             try:
-#                                 student_email = request.data.get("email")
-#                                 if student_email:
-#                                     individual.email = student_email
-#                                     individual.save()
-#                                     send_dnft_email(recipient=str(individual.email), sender_name=user.name, link="https://www.bitmemoirlatam.com/#/verify/" + user.contract_address + "/" + str(token_id))
-#                             except Exception as e:
-#                                 print("Email exception")
-#                                 print(e)
-#                         expect Exception as e:
-#                             print(e)
-                            
-#                         return Response({"status": "Success", "response": token_id})
-#                     else:
-#                         print("else......")
-#                         metadata = {
-#                             "nameOfOrg": nameOfOrg,
-#                             "image": BASE_URL + user.account + "/dnfts/" + str(token_id) + ".png",
-#                             "membership"=membership,
-#                             "issue_date_nft": issue_date_nft,
-#                         }
-#                         json_data = json.dumps(metadata)
-#                         content = ContentFile(json_data)
-#                         try:
-#                             metadata_url = BASE_URL + user.account + "/dnfts/" + str(token_id) + ".json"
-#                             token_id = create_certificate(
-#                                 account=receiver,
-#                                 metadata=metadata_url,
-#                                 contract_address=user.contract_address,
-#                             )
-#                             print("token_id",token_id)
-                            
-#                             #Save metadata
-#                             output = BytesIO()
-#                             output.seek(0)
-#                             with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
-#                                 f.write(output.getvalue())
-#                                 loyaltyNFT.metadata.save(str(token_id) + ".json", content)
-#                                 loyaltyNFT.save()
-                                
-#                             os.unlink(f.name)
-                            
-#                             try:
-#                                 student_email = request.data.get("email")
-#                                 if student_email:
-#                                     individual.email = student_email
-#                                     individual.save()
-#                                     send_dnft_email(recipient=str(individual.email), sender_name=user.name, link="https://www.bitmemoirlatam.com/#/verify/" + user.contract_address + "/" + str(token_id))
-#                             except Exception as e:
-#                                 print("Email exception")
-#                                 print(e)
-#                         expect Exception as e:
-#                             print(e)
-                            
-#                         return Response({"status": "Success", "response": token_id})
-#                 except Exception as e:
-#                     print(e)
-#                     return Response({"status": "Failure", "response": "Invalid data."})
-#             else:
-#                 return Response({"status": "Failure", "response": "Storage limit exceeded."})
-#         if request_type == "update":
-#             try:
-#                 account = Web3.toChecksumAddress(request.data["account"])
-#                 nameOfOrg= request.data["nameOfOrg"]
-#                 image = request.data["image"]
-#                 isMembership = request.data["isMembership"]
-#                 membership = request.data["membership"]
-#                 isReward= request.data["isReward"]
-#                 reward= request.data["reward"]
-#                 issue_date_reward= str(date.today())
-#                 expiray_date_of_reward= request.data["expiray_date_of_reward"]
-#                 expiry_date_of_membership = request.data["expiry_date_of_membership"]
-#                 token_id = request.data["token_id"]
-                
-#                 with tempfile.NamedTemporaryFile(suffix='.json', delete=False) as f:
-#                     f.read()
-                    
-                
-#                 if isMembership == 'true' and isReward= =='true':
-#                     print("isMembership and isReward......")
-                    
-                    
-                
-                
-           
 
-#             except Exception as e:
-#                 return Response({"status": "Failure", "response": "Invalid data."})
-#     except Exception as e:
-#         return Response({"status": "Failure", "response": "Invalid data."})       
-    
-    
-    
-    
-# @api_view(["POST", "GET"])
-# def view_dnft_reward(request):
-#     account = Web3.toChecksumAddress(request.data["account"])
-#     print(account)
-#     print("started...")
-#     url=f"https://polygon-mumbai.g.alchemy.com/v2/grUWncEJ7W6uEsFhwdjcdVzDJPktAulv/getNFTs?owner={account}&contractAddresses%5B%5D={'0x751554101A9300A2b6fC6f857aEe71E2b52B522C'}&refreshCache=true"
-#     data = requests.get(url).json()
-#     # data=data['ownedNfts']
-#     # print("data")
-    
-    
-#     # data_lst=[]
-#     # for nft in data:
-#     #     if nft['title'] == 'XYZ':
-#     #         token_id = int(nft['id']['tokenId'],0)
-#     #         print("token_id",token_id)
-#     #         # uri = myContract.functions.tokenURI(token_id).call()
-#     #         # print("uri",uri)
-#     #         # uri_data= requests.get(uri).json()
-#     #         uri_data= nft['metadata']
-#     #         data_lst.append({
-#     #             'Token_id':token_id,
-#     #             "metadata":uri_data
-#     #         })
-#     #         print("Data Append")
-            
-    
-    
-#     # api_key = "LVcjaULlI7MJPs7hoScwOKRl1NDoFYs2GEptyRE8Dr52oMAQ9AzN0kzqSHJmFkUF"
-#     # params = {
-#     #         "address": "0xAF4fa01F430eC2297385Ff0D776C58F492BD8FC2",
-#     #         "chain": "mumbai",
-#     #         "format": "decimal",
-#     #         "limit": 0,
-#     #         "token_addresses": [],
-#     #         "cursor": "",
-#     #         "normalizeMetadata": True,
-#     #     }
-#     # result = evm_api.nft.get_wallet_nfts(
-#     #         api_key=api_key,
-#     #         params=params,
-#     #     )
-    
-#     # headers = {
-#     #     'accept': 'application/json',
-#     #     'X-API-Key': 'LVcjaULlI7MJPs7hoScwOKRl1NDoFYs2GEptyRE8Dr52oMAQ9AzN0kzqSHJmFkUF',
-#     # }
-#     # params = {
-#     #     'chain': 'mumbai',
-#     #     'format': 'decimal',
-#     #     'disable_total': 'true',
-#     #     'normalizeMetadata': 'true',
-#     # }
-#     # response = requests.get(
-#     #     f'https://deep-index.moralis.io/api/v2/{account}/nft',
-#     #     params=params,
-#     #     headers=headers,
-#     # )
-    
-#     # url = "https://polygon-mumbai.g.alchemy.com/nft/v2/grUWncEJ7W6uEsFhwdjcdVzDJPktAulv/getNFTs?owner=0xAF4fa01F430eC2297385Ff0D776C58F492BD8FC2&refreshCache=True"
-#     # url ="https://polygon-mumbai.g.alchemy.com/nft/v2/grUWncEJ7W6uEsFhwdjcdVzDJPktAulv/getNFTs?owner=0xAF4fa01F430eC2297385Ff0D776C58F492BD8FC2&pageSize=100&contractAddresses[]=0x751554101A9300A2b6fC6f857aEe71E2b52B522C&withMetadata=true"
-#     # url = "https://alchemy-sdk-core-example.com/grUWncEJ7W6uEsFhwdjcdVzDJPktAulv/getNftsForOwner?owner=0xAF4fa01F430eC2297385Ff0D776C58F492BD8FC2&omitMetadata=false"
-#     # headers = {"accept": "application/json"}
-#     # response = requests.get(url, headers=headers)
-#     # print(response)
-#     # data=response.json()
-   
-    
-#     return Response({"status": "Success", "response": data})
-    
-    
-        
-    
-    
-    
-    
-    
-    
-    
-# @api_view(["POST", "GET"])
-# def update_reward_nft(request):
-#     account = Web3.toChecksumAddress(request.data["account"])
-#     nameOfOrg= request.data["nameOfOrg"]
-#     image = request.data["image"]
-#     isMembership = request.data["isMembership"]
-#     membership = request.data["membership"]
-#     # issue_date_nft = date.today()
-#     # issue_date_nft= request.data["issue_date_nft"]
-#     isReward= request.data["isReward"]
-#     reward= request.data["reward"]
-#     issue_date_reward= str(date.today())
-#     expiray_date_of_reward= request.data["expiray_date_of_reward"]
-#     expiry_date_of_membership = request.data["expiry_date_of_membership"]
-#     token_id = int(request.data["token_id"])
-#     uri = myContract.functions.tokenURI(token_id).call()
-#     print(uri)
-    
-#     data = requests.get(uri).json()
-#     rewards = data['rewards']
-#     if isReward == 'true':
-#         rewards.append({"reward":reward,"issue_date_reward":issue_date_reward,"expiry_date_reward":expiray_date_of_reward,'is_claimed':False,})
-#     issue_date_nft = data['issue_date_nft']
-#     print("isMembership",isMembership)
-#     print("isReward",isReward)
-    
-    
-#     try:   
-#         if isMembership == 'true' and isReward== 'true':
-#             print("isMembership and isReward......")
-#             contract_address = config['contract_address']
-#             print("contract_address",contract_address)
-#             metadata_url = get_metadata_url_dnft(
-#                 nameOfOrg=nameOfOrg,
-#                 image=image,
-#                 issue_date_nft=issue_date_nft,
-#                 membership=membership,
-#                 expiry_date_memberShip=expiry_date_of_membership,
-#                 rewards=rewards,
-#             )
-#             print("metadata_url",metadata_url)
 
-#             tx_hash = update_certificate(
-#                 metadata= metadata_url,
-#                 contract_address=contract_address,
-#                 token_id= token_id,
-#             ) 
-#             return Response({"status": "Success", "response": tx_hash})
-        
-#         elif isMembership == 'true':
-#             print("isMembership......")
-#             contract_address = config['contract_address']
-#             metadata_url = get_metadata_url_dnft(
-#                 nameOfOrg=nameOfOrg,
-#                 image=image,
-#                 issue_date_nft=issue_date_nft,
-#                 membership=membership,
-#                 expiry_date_memberShip=expiry_date_of_membership,
-#                 rewards=rewards,
-#             )
-#             tx_hash = update_certificate(
-#                 metadata= metadata_url,
-#                 contract_address=contract_address,
-#                 token_id= token_id,
-#             ) 
-            
-#             return Response({"status": "Success", "response": tx_hash})
-#         elif isReward =='true':
-#             print("isReward......")
-#             contract_address = config['contract_address']
-#             metadata_url = get_metadata_url_dnft(
-#                 nameOfOrg=nameOfOrg,
-#                 image=image,
-#                 membership=membership,
-#                 expiry_date_memberShip=expiry_date_of_membership,
-#                 issue_date_nft=issue_date_nft,
-#                 rewards=rewards,
-#             )
-#             tx_hash = update_certificate(
-#                 metadata= metadata_url,
-#                 contract_address=contract_address,
-#                 token_id= token_id,
-#             ) 
-            
-#             return Response({"status": "Success", "response": tx_hash})
-#         else:
-#             print("else......")
-#             contract_address = config['contract_address']
-#             metadata_url = get_metadata_url_dnft(
-#                 nameOfOrg=nameOfOrg,
-#                 image=image,
-#                 membership=membership,
-#                 issue_date_nft=issue_date_nft,
-#             )
-#             tx_hash = update_certificate(
-#                 metadata= metadata_url,
-#                 contract_address=contract_address,
-#                 token_id= token_id,
-#             ) 
-            
-#             return Response({"status": "Success", "response": tx_hash})
-#     except Exception as e:
-#         print(e)
-#         return Response({"status": "Failure", "response": "Invalid data."})
-#     # return Response({"status": "Success", "response": "Invalid data."})
-    
-    
-# @api_view(["POST", "GET"])
-# def claim_reward(request):
-    # account = Web3.toChecksumAddress(request.data["account"])
-    token_id = int(request.data["token_id"])
-    arr_index = int(request.data["arr_index"])
-    uri = myContract.functions.tokenURI(token_id).call()
-    data = requests.get(uri).json()
-    rewards = data['rewards']
-    rewards[arr_index]['is_claimed']=True
-    
-    # print(data['rewards'])
-    
+@api_view(["POST", "GET"])
+def mint_reward_nft(request):
     try:
-        print("isReward......")
-        contract_address = config['contract_address']
-        metadata_url = get_metadata_url_dnft(
-            nameOfOrg=data['name'],
-            image=data['image'],
-            membership=data['membership'],
-            issue_date_nft=data['issue_date_nft'],
-            rewards=rewards,
-        )
-        print("metadata_url",metadata_url)
-        tx_hash = update_certificate(
-            metadata= metadata_url,
-            contract_address=contract_address,
-            token_id= token_id,
-        ) 
-        
-        return Response({"status": "Success", "response": 'Success'})
+        request_type = request.data.get("request_type")
+
+        if request_type == "mint_nft":
+            account = Web3.toChecksumAddress(request.data.get("account"))
+            receiver = Web3.toChecksumAddress(request.data.get("receiver"))
+            nft_image = request.FILES.get("image")
+            user = User.objects.get(account=account)
+            token_id = get_token_id(contract_address=user.contract_address)
+            nameOfOrg = request.data.get("nameOfOrg")
+            isMembership = request.data.get("isMembership") == "true"
+            membership = request.data.get("membership")
+            issue_date_nft = date.today().isoformat()
+            isReward = request.data.get("isReward") == "true"
+            reward = request.data.get("reward")
+            issue_date_reward = str(date.today())
+            expiry_date_of_reward = request.data.get("expiry_date_of_reward")
+            expiry_date_of_membership = request.data.get("expiry_date_of_membership")
+
+            loyaltyNFT = Loyalty_NFT.objects.create(
+                user=user,
+                wallet_address=receiver,
+                token_id=token_id,
+            )
+
+            try:
+                metadata = {
+                    "nameOfOrg": nameOfOrg,
+                    "image": f"{BASE_URL}/media/{user.account}/loyalty/{token_id}.png",
+                    "issue_date_nft": issue_date_nft,
+                }
+
+                if isMembership:
+                    metadata["membership"] = membership
+                    metadata["expiry_date_memberShip"] = expiry_date_of_membership
+
+                if isReward:
+                    rewards = [
+                        {
+                            "reward": reward,
+                            "issue_date_reward": issue_date_reward,
+                            "expiry_date_reward": expiry_date_of_reward,
+                            "is_claimed": False,
+                        }
+                    ]
+                    metadata["rewards"] = rewards
+
+                json_data = json.dumps(metadata)
+                content = ContentFile(json_data)
+
+                metadata_url = f"{BASE_URL}/media/{user.account}/loyalty/{token_id}.json"
+                token_id = create_certificate(
+                    account=receiver,
+                    metadata=metadata_url,
+                    contract_address=user.contract_address,
+                )
+
+                base_image = Image.open(nft_image)
+                with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+                    base_image.save(f, format="PNG")
+                    loyaltyNFT.nft_image.save(f"{token_id}.png", f)
+                    loyaltyNFT.metadata.save(f"{token_id}.json", content)
+                    loyaltyNFT.is_minted = True
+                    loyaltyNFT.save()
+
+                os.unlink(f.name)
+
+                return Response({"status": "Success", "response": token_id})
+
+            except Exception as e:
+                print(e)
+                return Response({"status": "Failure", "response": "Invalid data."})
+
+        elif request_type == "update_nft":
+            nft_id = request.data.get("nft_id")
+            user_address = request.data.get("account")
+            receiver_address = request.data.get("receiver")
+            update_fields = {}
+
+            nft_image = request.FILES.get("image")
+            if nft_image:
+                loyaltyNFT = Loyalty_NFT.objects.get(
+                    id=nft_id,
+                    user__account=user_address,
+                    wallet_address=receiver_address,
+                )
+                if loyaltyNFT.nft_image:
+                    loyaltyNFT.nft_image.delete(save=False)
+                update_fields["nft_image"] = nft_image
+
+            nameOfOrg = request.data.get("nameOfOrg")
+            if nameOfOrg:
+                update_fields["nameOfOrg"] = nameOfOrg
+
+            isMembership = request.data.get("isMembership")
+            if isMembership:
+                membership = request.data.get("membership")
+                expiry_date_of_membership = request.data.get(
+                    "expiry_date_of_membership"
+                )
+
+                user = User.objects.get(account=user_address)
+                loyaltyNFT = Loyalty_NFT.objects.get(
+                    id=nft_id, user=user, wallet_address=receiver_address
+                )
+                token_id = loyaltyNFT.token_id
+
+                metadata_url = f"{user.account}/loyalty/{token_id}.json"
+                metadata_path = os.path.join(settings.MEDIA_ROOT, metadata_url)
+
+                with open(metadata_path, "r") as metadata_file:
+                    existing_metadata = json.load(metadata_file)
+
+                existing_rewards = existing_metadata.get("rewards", [])
+
+                for reward in existing_rewards:
+                    reward["membership"] = membership
+
+                existing_metadata["expiry_date_memberShip"] = expiry_date_of_membership
+
+                with open(metadata_path, "w") as metadata_file:
+                    json.dump(existing_metadata, metadata_file)
+
+            isReward = request.data.get("isReward")
+            if isReward:
+                reward = request.data.get("reward")
+                issue_date_reward = str(date.today())
+                expiry_date_of_reward = request.data.get("expiry_date_of_reward")
+
+                user = User.objects.get(account=user_address)
+                loyaltyNFT = Loyalty_NFT.objects.get(
+                    id=nft_id, user=user, wallet_address=receiver_address
+                )
+                token_id = loyaltyNFT.token_id
+
+                metadata_url = f"{user.account}/loyalty/{token_id}.json"
+                metadata_path = os.path.join(settings.MEDIA_ROOT, metadata_url)
+
+                with open(metadata_path, "r") as metadata_file:
+                    existing_metadata = json.load(metadata_file)
+
+                existing_rewards = existing_metadata.get("rewards", [])
+
+                new_reward = {
+                    "reward": reward,
+                    "issue_date_reward": issue_date_reward,
+                    "expiry_date_reward": expiry_date_of_reward,
+                    "is_claimed": False,
+                    "membership": membership,
+                }
+
+                existing_rewards.append(new_reward)
+                existing_metadata["rewards"] = existing_rewards
+
+                with open(metadata_path, "w") as metadata_file:
+                    json.dump(existing_metadata, metadata_file)
+
+            Loyalty_NFT.objects.filter(
+                id=nft_id, user__account=user_address, wallet_address=receiver_address
+            ).update(**update_fields)
+
+            return Response({"status": "Success", "response": "NFT updated."})
+
+        elif request_type == "view_reward":
+            nft_id = request.data.get("nft_id")
+            user_address = request.data.get("account")
+            receiver_address = request.data.get("receiver")
+
+            try:
+                user = User.objects.get(account=user_address)
+                loyalty_nft = Loyalty_NFT.objects.get(
+                    id=nft_id, user=user, wallet_address=receiver_address
+                )
+
+                loyalty_nft_model = model_to_dict(loyalty_nft)
+                loyalty_nft_model["nft_image"] = loyalty_nft.nft_image.url
+                loyalty_nft_model["metadata"] = None
+                loyalty_nft_model["timestamp"] = ""
+                loyalty_nft_model["rewards"] = []
+
+                if loyalty_nft.metadata:
+                    with loyalty_nft.metadata.open(mode="r") as metadata_file:
+                        metadata = json.load(metadata_file)
+                        loyalty_nft_model["metadata"] = metadata
+                        rewards = metadata.get("rewards")
+                        if rewards:
+                            loyalty_nft_model["rewards"] = rewards
+
+                return Response({"status": "Success", "response": loyalty_nft_model})
+            except User.DoesNotExist:
+                return Response({"status": "Failure", "response": "User not found."})
+            except Loyalty_NFT.DoesNotExist:
+                return Response(
+                    {"status": "Failure", "response": "Loyalty NFT not found."}
+                )
+
+        else:
+            return Response({"status": "Failure", "response": "Invalid request type."})
+
     except Exception as e:
         print(e)
         return Response({"status": "Failure", "response": "Invalid data."})
