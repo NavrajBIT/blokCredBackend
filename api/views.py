@@ -22,7 +22,8 @@ from .models import (
     Subscription,
     Batch, 
     Students,
-    Individual
+    Individual,
+    LoyaltyNFT
 )
 from .contract_config import config
 from .storagecalls import get_metadata_url, get_all_nfts, upload_image, add_frame
@@ -1875,6 +1876,29 @@ def create_batch(request):
                         "status":"Success",
                         "response": batch_list
                     })
+            
+        elif request_type == "read1":
+            account = Web3.toChecksumAddress(request.data["account"])
+            user=User.objects.get(account=account)
+            individuals=list(Individual.objects.filter(user=user))
+            print(individuals)
+            individual_list=[]
+            for individual in individuals:
+                individual_model=model_to_dict(individual)
+                try:
+                    individual_model["nft_image"]=individual.nft_image.url
+                    individual_model["metadata"]=individual.metadata.url
+                    individual_model["timestamp"]=individual.timestamp
+                    individual_list.append(individual_model)
+                except Exception as e:
+                    print(e)
+            
+            return Response({
+                "status":"Success",
+                "response":individual_list
+            })
+                
+            
               
         elif request_type == "update":
             account = Web3.toChecksumAddress(request.data["account"])
@@ -2045,9 +2069,11 @@ def create_batch(request):
                 print(e)
             return Response({"status": "success"})
         elif request_type == "update_nft":
+            print("Updating NFT...")
             account = Web3.toChecksumAddress(request.data["account"])
             user = User.objects.get(account=account)
             token_id = request.data["token_id"]
+            individual = Individual.objects.get(user=user, token_id=token_id)
             x_pos = request.data["x_pos"]
             y_pos = request.data["y_pos"]
             nft_image = request.data["nft_image"]
@@ -2055,7 +2081,7 @@ def create_batch(request):
             width, height = base_image.size
             text_box_height = int(width * 0.1)
             qr = qrcode.QRCode(version=None, box_size=3)
-            qr_data = "https:www.bitmemoirlatam.com/#/verify/"+individual.user.contract_address+"/"+str(token_id)
+            qr_data = "https:www.bitmemoirlatam.com/#/verify/"+user.contract_address+"/"+str(token_id)
             qr.add_data(qr_data)
             qr.make(fit=True)
             qr_image = qr.make_image(fill_color=(0, 0, 0), back_color=(255, 255, 255, 0))
@@ -2095,7 +2121,7 @@ def create_batch(request):
             print(individual_list)
             return Response({
                 "status": "success",
-                "individual_list": individual_list
+                "response": individual_list
             })
 
         return Response(
@@ -2111,5 +2137,490 @@ def create_batch(request):
     except Exception as e:
         print("Printing net exception...")
         print(e)
+    
+    
+    
+    
+# @api_view(["POST", "GET"])
+# def mint_reward_nft(request):
+#     try:
+#         request_type = request.data["request_type"]
         
-     
+#         if request_type == "mint_nft":
+#             account = Web3.toChecksumAddress(request.data["account"])
+#             receiver = Web3.toChecksumAddress(request.data["receiver"])
+#             image = request.data["image"]
+#             user= User.objects.get(account=account)
+#             token_id = get_token_id(contract_address=user.contract_address)
+#             image_size = image.size/ 1024/ 1024
+#             if True:
+#                 nameOfOrg= request.data["nameOfOrg"]
+#                 isMembership = request.data["isMembership"]
+#                 membership = request.data["membership"]
+#                 issue_date_nft = date.today()
+#                 isReward= request.data["isReward"]
+#                 reward= request.data["reward"]
+#                 issue_date_reward= str(date.today())
+#                 expiray_date_of_reward= request.data["expiray_date_of_reward"]
+#                 expiry_date_of_membership = request.data["expiry_date_of_membership"]
+#                 loyaltyNFT = LoyaltyNFT.objects.create(
+#                     user=user,
+#                     token_id=token_id,
+#                     nft_image=image,
+#                     wallet_address=receiver,
+#                 )
+                
+#                 try:
+                    
+#                     if isMembership == "true" and isReward== 'true':
+#                         print("isMembership and isReward......")
+#                         metadata={
+#                             "nameOfOrg":nameOfOrg,
+#                             "image": BASE_URL + user.account + "/dnfts/" + str(token_id) + ".png",
+#                             "issue_date_nft":issue_date_nft,
+#                             "membership":membership,
+#                             "expiry_date_memberShip":expiry_date_of_membership,
+#                             "rewards":[
+#                                 {
+#                                     "reward":reward,
+#                                     "issue_date_reward":issue_date_reward,
+#                                     "expiry_date_reward":expiray_date_of_reward,
+#                                     'is_claimed':False,
+#                                 }
+#                             ]
+#                         }
+                        
+#                         json_data = json.dumps(metadata)
+#                         content =ContentFile(json_data)
+                        
+#                         try:
+#                             metadata_url = BASE_URL + user.account + "/dnfts/" + str(token_id) + ".json"
+#                             token_id = create_certificate(
+#                                 account=receiver,
+#                                 metadata=metadata_url,
+#                                 contract_address=user.contract_address,
+#                             )
+#                             print("token_id",token_id)
+                            
+#                             #Save metadata
+#                             output = BytesIO()
+#                             output.seek(0)
+#                             with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
+#                                 f.write(output.getvalue())
+#                                 loyaltyNFT.metadata.save(str(token_id) + ".json", content)
+#                                 loyaltyNFT.save()
+                                
+#                             os.unlink(f.name)
+                            
+#                             try:
+#                                 student_email = request.data.get("email")
+#                                 if student_email:
+#                                     individual.email = student_email
+#                                     individual.save()
+#                                     send_dnft_email(recipient=str(individual.email), sender_name=user.name, link="https://www.bitmemoirlatam.com/#/verify/" + user.contract_address + "/" + str(token_id))
+#                             except Exception as e:
+#                                 print("Email exception")
+#                                 print(e)
+#                         expect Exception as e:
+#                             print(e)
+                            
+#                         return Response({"status": "Success", "response": token_id})
+                    
+#                     elif isMembership == 'true':
+#                         print("isMembership......")
+#                         contract_address = config['contract_address']
+                        
+#                         metadata = {
+#                             "nameOfOrg": nameOfOrg,
+#                             "image": BASE_URL + user.account + "/dnfts/" + str(token_id) + ".png",
+#                             "issue_date_nft": issue_date_nft,
+#                             "membership": membership,
+#                             "expiry_date_memberShip": expiry_date_of_membership,
+                            
+#                         }
+#                         json_data = json.dumps(metadata)
+#                         content = ContentFile(json_data)
+#                         try:
+#                             metadata_url = BASE_URL + user.account + "/dnfts/" + str(token_id) + ".json"
+#                             token_id = create_certificate(
+#                                 account=receiver,
+#                                 metadata=metadata_url,
+#                                 contract_address=user.contract_address,
+#                             )
+#                             print("token_id",token_id)
+                            
+#                             #Save metadata
+#                             output = BytesIO()
+#                             output.seek(0)
+#                             with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
+#                                 f.write(output.getvalue())
+#                                 loyaltyNFT.metadata.save(str(token_id) + ".json", content)
+#                                 loyaltyNFT.save()
+                                
+#                             os.unlink(f.name)
+                            
+#                             try:
+#                                 student_email = request.data.get("email")
+#                                 if student_email:
+#                                     individual.email = student_email
+#                                     individual.save()
+#                                     send_dnft_email(recipient=str(individual.email), sender_name=user.name, link="https://www.bitmemoirlatam.com/#/verify/" + user.contract_address + "/" + str(token_id))
+#                             except Exception as e:
+#                                 print("Email exception")
+#                                 print(e)
+#                         expect Exception as e:
+#                             print(e)
+                            
+#                         return Response({"status": "Success", "response": token_id})
+                
+#                     elif isReward == 'true':
+#                         print("isReward......")
+                        
+#                         metadata {
+#                             "nameOfOrg": nameOfOrg,
+#                             "image": BASE_URL + user.account + "/dnfts/" + str(token_id) + ".png",
+#                             "issue_date_nft": issue_date_nft,
+#                             "rewards": [
+#                                 {
+#                                     "reward": reward,
+#                                     "issue_date_reward": issue_date_reward,
+#                                     "expiry_date_reward": expiray_date_of_reward,
+#                                     'is_claimed': False,
+#                                 }
+#                             ]
+                            
+#                         }
+#                         json_data = json.dumps(metadata)
+#                         content = ContentFile(json_data)
+#                         try:
+#                             metadata_url = BASE_URL + user.account + "/dnfts/" + str(token_id) + ".json"
+#                             token_id = create_certificate(
+#                                 account=receiver,
+#                                 metadata=metadata_url,
+#                                 contract_address=user.contract_address,
+#                             )
+#                             print("token_id",token_id)
+                            
+#                             #Save metadata
+#                             output = BytesIO()
+#                             output.seek(0)
+#                             with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
+#                                 f.write(output.getvalue())
+#                                 loyaltyNFT.metadata.save(str(token_id) + ".json", content)
+#                                 loyaltyNFT.save()
+                                
+#                             os.unlink(f.name)
+                            
+#                             try:
+#                                 student_email = request.data.get("email")
+#                                 if student_email:
+#                                     individual.email = student_email
+#                                     individual.save()
+#                                     send_dnft_email(recipient=str(individual.email), sender_name=user.name, link="https://www.bitmemoirlatam.com/#/verify/" + user.contract_address + "/" + str(token_id))
+#                             except Exception as e:
+#                                 print("Email exception")
+#                                 print(e)
+#                         expect Exception as e:
+#                             print(e)
+                            
+#                         return Response({"status": "Success", "response": token_id})
+#                     else:
+#                         print("else......")
+#                         metadata = {
+#                             "nameOfOrg": nameOfOrg,
+#                             "image": BASE_URL + user.account + "/dnfts/" + str(token_id) + ".png",
+#                             "membership"=membership,
+#                             "issue_date_nft": issue_date_nft,
+#                         }
+#                         json_data = json.dumps(metadata)
+#                         content = ContentFile(json_data)
+#                         try:
+#                             metadata_url = BASE_URL + user.account + "/dnfts/" + str(token_id) + ".json"
+#                             token_id = create_certificate(
+#                                 account=receiver,
+#                                 metadata=metadata_url,
+#                                 contract_address=user.contract_address,
+#                             )
+#                             print("token_id",token_id)
+                            
+#                             #Save metadata
+#                             output = BytesIO()
+#                             output.seek(0)
+#                             with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
+#                                 f.write(output.getvalue())
+#                                 loyaltyNFT.metadata.save(str(token_id) + ".json", content)
+#                                 loyaltyNFT.save()
+                                
+#                             os.unlink(f.name)
+                            
+#                             try:
+#                                 student_email = request.data.get("email")
+#                                 if student_email:
+#                                     individual.email = student_email
+#                                     individual.save()
+#                                     send_dnft_email(recipient=str(individual.email), sender_name=user.name, link="https://www.bitmemoirlatam.com/#/verify/" + user.contract_address + "/" + str(token_id))
+#                             except Exception as e:
+#                                 print("Email exception")
+#                                 print(e)
+#                         expect Exception as e:
+#                             print(e)
+                            
+#                         return Response({"status": "Success", "response": token_id})
+#                 except Exception as e:
+#                     print(e)
+#                     return Response({"status": "Failure", "response": "Invalid data."})
+#             else:
+#                 return Response({"status": "Failure", "response": "Storage limit exceeded."})
+#         if request_type == "update":
+#             try:
+#                 account = Web3.toChecksumAddress(request.data["account"])
+#                 nameOfOrg= request.data["nameOfOrg"]
+#                 image = request.data["image"]
+#                 isMembership = request.data["isMembership"]
+#                 membership = request.data["membership"]
+#                 isReward= request.data["isReward"]
+#                 reward= request.data["reward"]
+#                 issue_date_reward= str(date.today())
+#                 expiray_date_of_reward= request.data["expiray_date_of_reward"]
+#                 expiry_date_of_membership = request.data["expiry_date_of_membership"]
+#                 token_id = request.data["token_id"]
+                
+#                 with tempfile.NamedTemporaryFile(suffix='.json', delete=False) as f:
+#                     f.read()
+                    
+                
+#                 if isMembership == 'true' and isReward= =='true':
+#                     print("isMembership and isReward......")
+                    
+                    
+                
+                
+           
+
+#             except Exception as e:
+#                 return Response({"status": "Failure", "response": "Invalid data."})
+#     except Exception as e:
+#         return Response({"status": "Failure", "response": "Invalid data."})       
+    
+    
+    
+    
+# @api_view(["POST", "GET"])
+# def view_dnft_reward(request):
+#     account = Web3.toChecksumAddress(request.data["account"])
+#     print(account)
+#     print("started...")
+#     url=f"https://polygon-mumbai.g.alchemy.com/v2/grUWncEJ7W6uEsFhwdjcdVzDJPktAulv/getNFTs?owner={account}&contractAddresses%5B%5D={'0x751554101A9300A2b6fC6f857aEe71E2b52B522C'}&refreshCache=true"
+#     data = requests.get(url).json()
+#     # data=data['ownedNfts']
+#     # print("data")
+    
+    
+#     # data_lst=[]
+#     # for nft in data:
+#     #     if nft['title'] == 'XYZ':
+#     #         token_id = int(nft['id']['tokenId'],0)
+#     #         print("token_id",token_id)
+#     #         # uri = myContract.functions.tokenURI(token_id).call()
+#     #         # print("uri",uri)
+#     #         # uri_data= requests.get(uri).json()
+#     #         uri_data= nft['metadata']
+#     #         data_lst.append({
+#     #             'Token_id':token_id,
+#     #             "metadata":uri_data
+#     #         })
+#     #         print("Data Append")
+            
+    
+    
+#     # api_key = "LVcjaULlI7MJPs7hoScwOKRl1NDoFYs2GEptyRE8Dr52oMAQ9AzN0kzqSHJmFkUF"
+#     # params = {
+#     #         "address": "0xAF4fa01F430eC2297385Ff0D776C58F492BD8FC2",
+#     #         "chain": "mumbai",
+#     #         "format": "decimal",
+#     #         "limit": 0,
+#     #         "token_addresses": [],
+#     #         "cursor": "",
+#     #         "normalizeMetadata": True,
+#     #     }
+#     # result = evm_api.nft.get_wallet_nfts(
+#     #         api_key=api_key,
+#     #         params=params,
+#     #     )
+    
+#     # headers = {
+#     #     'accept': 'application/json',
+#     #     'X-API-Key': 'LVcjaULlI7MJPs7hoScwOKRl1NDoFYs2GEptyRE8Dr52oMAQ9AzN0kzqSHJmFkUF',
+#     # }
+#     # params = {
+#     #     'chain': 'mumbai',
+#     #     'format': 'decimal',
+#     #     'disable_total': 'true',
+#     #     'normalizeMetadata': 'true',
+#     # }
+#     # response = requests.get(
+#     #     f'https://deep-index.moralis.io/api/v2/{account}/nft',
+#     #     params=params,
+#     #     headers=headers,
+#     # )
+    
+#     # url = "https://polygon-mumbai.g.alchemy.com/nft/v2/grUWncEJ7W6uEsFhwdjcdVzDJPktAulv/getNFTs?owner=0xAF4fa01F430eC2297385Ff0D776C58F492BD8FC2&refreshCache=True"
+#     # url ="https://polygon-mumbai.g.alchemy.com/nft/v2/grUWncEJ7W6uEsFhwdjcdVzDJPktAulv/getNFTs?owner=0xAF4fa01F430eC2297385Ff0D776C58F492BD8FC2&pageSize=100&contractAddresses[]=0x751554101A9300A2b6fC6f857aEe71E2b52B522C&withMetadata=true"
+#     # url = "https://alchemy-sdk-core-example.com/grUWncEJ7W6uEsFhwdjcdVzDJPktAulv/getNftsForOwner?owner=0xAF4fa01F430eC2297385Ff0D776C58F492BD8FC2&omitMetadata=false"
+#     # headers = {"accept": "application/json"}
+#     # response = requests.get(url, headers=headers)
+#     # print(response)
+#     # data=response.json()
+   
+    
+#     return Response({"status": "Success", "response": data})
+    
+    
+        
+    
+    
+    
+    
+    
+    
+    
+# @api_view(["POST", "GET"])
+# def update_reward_nft(request):
+#     account = Web3.toChecksumAddress(request.data["account"])
+#     nameOfOrg= request.data["nameOfOrg"]
+#     image = request.data["image"]
+#     isMembership = request.data["isMembership"]
+#     membership = request.data["membership"]
+#     # issue_date_nft = date.today()
+#     # issue_date_nft= request.data["issue_date_nft"]
+#     isReward= request.data["isReward"]
+#     reward= request.data["reward"]
+#     issue_date_reward= str(date.today())
+#     expiray_date_of_reward= request.data["expiray_date_of_reward"]
+#     expiry_date_of_membership = request.data["expiry_date_of_membership"]
+#     token_id = int(request.data["token_id"])
+#     uri = myContract.functions.tokenURI(token_id).call()
+#     print(uri)
+    
+#     data = requests.get(uri).json()
+#     rewards = data['rewards']
+#     if isReward == 'true':
+#         rewards.append({"reward":reward,"issue_date_reward":issue_date_reward,"expiry_date_reward":expiray_date_of_reward,'is_claimed':False,})
+#     issue_date_nft = data['issue_date_nft']
+#     print("isMembership",isMembership)
+#     print("isReward",isReward)
+    
+    
+#     try:   
+#         if isMembership == 'true' and isReward== 'true':
+#             print("isMembership and isReward......")
+#             contract_address = config['contract_address']
+#             print("contract_address",contract_address)
+#             metadata_url = get_metadata_url_dnft(
+#                 nameOfOrg=nameOfOrg,
+#                 image=image,
+#                 issue_date_nft=issue_date_nft,
+#                 membership=membership,
+#                 expiry_date_memberShip=expiry_date_of_membership,
+#                 rewards=rewards,
+#             )
+#             print("metadata_url",metadata_url)
+
+#             tx_hash = update_certificate(
+#                 metadata= metadata_url,
+#                 contract_address=contract_address,
+#                 token_id= token_id,
+#             ) 
+#             return Response({"status": "Success", "response": tx_hash})
+        
+#         elif isMembership == 'true':
+#             print("isMembership......")
+#             contract_address = config['contract_address']
+#             metadata_url = get_metadata_url_dnft(
+#                 nameOfOrg=nameOfOrg,
+#                 image=image,
+#                 issue_date_nft=issue_date_nft,
+#                 membership=membership,
+#                 expiry_date_memberShip=expiry_date_of_membership,
+#                 rewards=rewards,
+#             )
+#             tx_hash = update_certificate(
+#                 metadata= metadata_url,
+#                 contract_address=contract_address,
+#                 token_id= token_id,
+#             ) 
+            
+#             return Response({"status": "Success", "response": tx_hash})
+#         elif isReward =='true':
+#             print("isReward......")
+#             contract_address = config['contract_address']
+#             metadata_url = get_metadata_url_dnft(
+#                 nameOfOrg=nameOfOrg,
+#                 image=image,
+#                 membership=membership,
+#                 expiry_date_memberShip=expiry_date_of_membership,
+#                 issue_date_nft=issue_date_nft,
+#                 rewards=rewards,
+#             )
+#             tx_hash = update_certificate(
+#                 metadata= metadata_url,
+#                 contract_address=contract_address,
+#                 token_id= token_id,
+#             ) 
+            
+#             return Response({"status": "Success", "response": tx_hash})
+#         else:
+#             print("else......")
+#             contract_address = config['contract_address']
+#             metadata_url = get_metadata_url_dnft(
+#                 nameOfOrg=nameOfOrg,
+#                 image=image,
+#                 membership=membership,
+#                 issue_date_nft=issue_date_nft,
+#             )
+#             tx_hash = update_certificate(
+#                 metadata= metadata_url,
+#                 contract_address=contract_address,
+#                 token_id= token_id,
+#             ) 
+            
+#             return Response({"status": "Success", "response": tx_hash})
+#     except Exception as e:
+#         print(e)
+#         return Response({"status": "Failure", "response": "Invalid data."})
+#     # return Response({"status": "Success", "response": "Invalid data."})
+    
+    
+# @api_view(["POST", "GET"])
+# def claim_reward(request):
+    # account = Web3.toChecksumAddress(request.data["account"])
+    token_id = int(request.data["token_id"])
+    arr_index = int(request.data["arr_index"])
+    uri = myContract.functions.tokenURI(token_id).call()
+    data = requests.get(uri).json()
+    rewards = data['rewards']
+    rewards[arr_index]['is_claimed']=True
+    
+    # print(data['rewards'])
+    
+    try:
+        print("isReward......")
+        contract_address = config['contract_address']
+        metadata_url = get_metadata_url_dnft(
+            nameOfOrg=data['name'],
+            image=data['image'],
+            membership=data['membership'],
+            issue_date_nft=data['issue_date_nft'],
+            rewards=rewards,
+        )
+        print("metadata_url",metadata_url)
+        tx_hash = update_certificate(
+            metadata= metadata_url,
+            contract_address=contract_address,
+            token_id= token_id,
+        ) 
+        
+        return Response({"status": "Success", "response": 'Success'})
+    except Exception as e:
+        print(e)
+        return Response({"status": "Failure", "response": "Invalid data."})

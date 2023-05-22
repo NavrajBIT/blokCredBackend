@@ -45,6 +45,10 @@ def individual_nft_image(instance, filename):
     filename = filename.replace(" ", "_")
     return "/".join([str(instance.user.account), "Individual", filename])
 
+def loyalty_nft_image(instance, filename):
+    filename = filename.replace(" ", "_")
+    return "/".join([str(instance.user.account), "loyalty", filename])
+
 class Admin(models.Model):
     name = models.CharField(max_length=50, default="BIT")
     designation = models.CharField(max_length=50, default="Developer")
@@ -174,3 +178,17 @@ class Individual(models.Model):
     token_id = models.IntegerField(default=0)
     is_minted = models.BooleanField(default=False)
     email = models.EmailField(null=True, blank=True)
+    
+    
+    
+# class LoyaltyNFT(models.Model):
+#     user = models.ForeignKey(User, on_delete=models.CASCADE)
+#     wallet_address = models.CharField(max_length=50)
+#     nft_image = models.ImageField(upload_to=loyality_nft_image, blank=True, null=True)
+#     metadata = models.FileField(upload_to=loyality_nft_image, blank=True, null=True)
+#     # qr_x_pos = models.FloatField(default = 10)
+#     # qr_y_pos = models.FloatField(default = 10)
+#     timestamp = models.DateTimeField(auto_now_add=True)
+#     token_id = models.IntegerField(default=0)
+#     is_minted = models.BooleanField(default=False)
+#     email = models.EmailField(null=True, blank=True)
