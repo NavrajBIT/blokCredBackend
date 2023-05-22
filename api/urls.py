@@ -2,7 +2,7 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-    # path("", views.home_page),
+    path("", views.home_page),
     path("admin", views.admin),
     path("user", views.user),
     path("kpi", views.kpi),
@@ -15,4 +15,5 @@ urlpatterns = [
     path("nonEssCert", views.issue_nonEsseCert),
     path("subForDev", views.customSubscriptionForDev),
     path("dnft", views.create_batch),
+    path("loyaltyNFT",views.mint_reward_nft),
 ]
