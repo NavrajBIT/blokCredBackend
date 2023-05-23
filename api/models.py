@@ -63,6 +63,11 @@ def individual_nft_image(instance, filename):
     filename = filename.replace(" ", "_")
     return "/".join([str(instance.user.account), "Individual", filename])
 
+
+def loyalty_nft_image(instance, filename):
+    filename = filename.replace(" ", "_")
+    return "/".join([str(instance.user.account), "loyalty_nft", filename])
+
 class Admin(models.Model):
     name = models.CharField(max_length=50, default="BIT")
     designation = models.CharField(max_length=50, default="Developer")

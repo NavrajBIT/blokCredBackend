@@ -25,7 +25,6 @@ from .models import (
     Individual,
     Loyalty_NFT,
     Individual,
-    LoyaltyNFT
 )
 from .contract_config import config
 from .storagecalls import (
@@ -70,7 +69,7 @@ def home_page(request):
             name="Shubham",
             designation="Developer",
             account=Web3.toChecksumAddress(
-                "0xb753F847356dEF957Dc809979fCB9B67d34daB32"
+                "0x49b25940Cbe3A823D4e1BfF6c1a4E31B0BF7f5D1"
             ),
             added_by=Web3.toChecksumAddress(
                 "0xb753F847356dEF957Dc809979fCB9B67d34daB32"
@@ -2004,19 +2003,11 @@ def create_batch(request):
                         )
 
             return Response({"status": "Success", "response": batch_list})
-
-                        batch_list.append({
-                            "id":i.id,
-                            "name":i.name,
-                            "description":i.decription,
-                            "batch_nft_image":"",
-                            "students": students                        
-                        })
                 
-            return Response({                    
-                        "status":"Success",
-                        "response": batch_list
-                    })
+            # return Response({                    
+            #             "status":"Success",
+            #             "response": batch_list
+            #         })
             
         elif request_type == "read1":
             account = Web3.toChecksumAddress(request.data["account"])
@@ -2409,122 +2400,256 @@ def mint_reward_nft(request):
                 return Response({"status": "Failure", "response": "Invalid data."})
 
         elif request_type == "update_nft":
-            nft_id = request.data.get("nft_id")
-            user_address = request.data.get("account")
-            receiver_address = request.data.get("receiver")
+            token_id = request.data.get("token_id")
+            user_address = Web3.toChecksumAddress(request.data.get("account"))
+            # receiver_address = request.data.get("receiver")
+            print(token_id, user_address)
+            print("update_nft")
             update_fields = {}
 
             nft_image = request.FILES.get("image")
-            if nft_image:
-                loyaltyNFT = Loyalty_NFT.objects.get(
-                    id=nft_id,
-                    user__account=user_address,
-                    wallet_address=receiver_address,
-                )
-                if loyaltyNFT.nft_image:
-                    loyaltyNFT.nft_image.delete(save=False)
-                update_fields["nft_image"] = nft_image
-
-            nameOfOrg = request.data.get("nameOfOrg")
-            if nameOfOrg:
-                update_fields["nameOfOrg"] = nameOfOrg
+            # if nft_image:
+            #     loyaltyNFT = Loyalty_NFT.objects.get(
+            #         token_id=token_id,
+            #         user__account=user_address,
+            #     )
+            #     if loyaltyNFT.nft_image:
+            #         loyaltyNFT.nft_image.delete(save=False)
+            #     update_fields["nft_image"] = nft_image
 
             isMembership = request.data.get("isMembership")
-            if isMembership:
-                membership = request.data.get("membership")
-                expiry_date_of_membership = request.data.get(
+            isReward = request.data.get("isReward")
+            membership = request.data.get("membership")
+            expiry_date_of_membership = request.data.get(
                     "expiry_date_of_membership"
                 )
-
-                user = User.objects.get(account=user_address)
-                loyaltyNFT = Loyalty_NFT.objects.get(
-                    id=nft_id, user=user, wallet_address=receiver_address
+            reward = request.data.get("reward")
+            issue_date_reward = str(date.today())
+            expiry_date_of_reward = request.data.get("expiry_date_of_reward")
+            user = User.objects.get(account=user_address)
+            loyaltyNFT = Loyalty_NFT.objects.get(
+                    token_id=token_id, user=user
                 )
+            print("isMembership", isMembership)
+            print("isReward", isReward)
+            if nft_image != '':
+                print("nft_image")
+                metadata_url = f"{user.account}/loyalty_nft/{token_id}.png"
+                metadata_path = os.path.normpath(os.path.join(settings.MEDIA_ROOT, metadata_url))
+                print(metadata_path)
+                with open(metadata_path, "wb") as metadata_file:
+                    metadata_file.write(nft_image.read())
+                # loyaltyNFT.nft_image = nft_image
+                # loyaltyNFT.save()
+        
+            if isMembership =='true' and isReward=='true':
+                print("isMembership and isReward")
                 token_id = loyaltyNFT.token_id
 
-                metadata_url = f"{user.account}/loyalty/{token_id}.json"
-                metadata_path = os.path.join(settings.MEDIA_ROOT, metadata_url)
-
+                metadata_url = f"{user.account}/loyalty_nft/{token_id}.json"
+                metadata_path = os.path.normpath(os.path.join(settings.MEDIA_ROOT, metadata_url))
+                print(metadata_path)
                 with open(metadata_path, "r") as metadata_file:
                     existing_metadata = json.load(metadata_file)
-
-                existing_rewards = existing_metadata.get("rewards", [])
-
-                for reward in existing_rewards:
-                    reward["membership"] = membership
-
+                
+                existing_metadata["membership"] = membership
                 existing_metadata["expiry_date_memberShip"] = expiry_date_of_membership
-
+                existing_rewards = existing_metadata.get("rewards", [])
+                existing_rewards.append(
+                    {
+                        "reward": reward,
+                        "issue_date_reward": issue_date_reward,
+                        "expiry_date_reward": expiry_date_of_reward,
+                        "is_claimed": False,
+                    })
+                existing_metadata["rewards"] = existing_rewards
+                
                 with open(metadata_path, "w") as metadata_file:
                     json.dump(existing_metadata, metadata_file)
-
-            isReward = request.data.get("isReward")
-            if isReward:
-                reward = request.data.get("reward")
-                issue_date_reward = str(date.today())
-                expiry_date_of_reward = request.data.get("expiry_date_of_reward")
-
-                user = User.objects.get(account=user_address)
-                loyaltyNFT = Loyalty_NFT.objects.get(
-                    id=nft_id, user=user, wallet_address=receiver_address
-                )
+                
+                return Response({"status": "Success", "response": "NFT updated successfully."})
+            elif isMembership=='true':
+                print("isMembership")
                 token_id = loyaltyNFT.token_id
-
-                metadata_url = f"{user.account}/loyalty/{token_id}.json"
-                metadata_path = os.path.join(settings.MEDIA_ROOT, metadata_url)
-
+                metadata_url = f"{user.account}/loyalty_nft/{token_id}.json"
+                metadata_path = os.path.normpath(os.path.join(settings.MEDIA_ROOT, metadata_url))
+                print(metadata_path)
                 with open(metadata_path, "r") as metadata_file:
                     existing_metadata = json.load(metadata_file)
-
-                existing_rewards = existing_metadata.get("rewards", [])
-
-                new_reward = {
-                    "reward": reward,
-                    "issue_date_reward": issue_date_reward,
-                    "expiry_date_reward": expiry_date_of_reward,
-                    "is_claimed": False,
-                    "membership": membership,
-                }
-
-                existing_rewards.append(new_reward)
-                existing_metadata["rewards"] = existing_rewards
-
+                existing_metadata["membership"] = membership
+                existing_metadata["expiry_date_memberShip"] = expiry_date_of_membership
                 with open(metadata_path, "w") as metadata_file:
                     json.dump(existing_metadata, metadata_file)
+                return Response({"status": "Success", "response": "NFT updated successfully."})
+            
+            elif isReward=='true':
+                print("isReward")
+                token_id = loyaltyNFT.token_id
+                metadata_url = f"{user.account}/loyalty_nft/{token_id}.json"
+                metadata_path = os.path.normpath(os.path.join(settings.MEDIA_ROOT, metadata_url))
+                print(metadata_path)
+                with open(metadata_path, "r") as metadata_file:
+                    existing_metadata = json.load(metadata_file)
+                existing_rewards = existing_metadata.get("rewards", [])
+                existing_rewards.append(
+                    {
+                        "reward": reward,
+                        "issue_date_reward": issue_date_reward,
+                        "expiry_date_reward": expiry_date_of_reward,
+                        "is_claimed": False,
+                    })
+                existing_metadata["rewards"] = existing_rewards
+                with open(metadata_path, "w") as metadata_file:
+                    json.dump(existing_metadata, metadata_file)
+                return Response({"status": "Success", "response": "NFT updated successfully."})
+            else:
+                print("else")
+                return Response({"status": "Failure", "response": "Invalid data."})
 
-            Loyalty_NFT.objects.filter(
-                id=nft_id, user__account=user_address, wallet_address=receiver_address
-            ).update(**update_fields)
+                
+                    
+                
+                
+                # if os.path.exists(metadata_path):
+                #     with open(metadata_path, "r") as metadata_file:
+                #         existing_metadata = json.load(metadata_file)
 
-            return Response({"status": "Success", "response": "NFT updated."})
+                #     existing_rewards = existing_metadata.get("rewards", [])
 
-        elif request_type == "view_reward":
-            nft_id = request.data.get("nft_id")
+                #     for reward in existing_rewards:
+                #         reward["membership"] = membership
+
+                #     existing_metadata["expiry_date_memberShip"] = expiry_date_of_membership
+
+                #     with open(metadata_path, "w") as metadata_file:
+                #         json.dump(existing_metadata, metadata_file)
+                        
+                # else:
+                    # print("metadata file not found")
+                    # return Response({"status": "Failure", "response": "Invalid data."})
+                        
+                
+                # with open(metadata_path, "r") as metadata_file:
+                #     existing_metadata = json.load(metadata_file)
+
+                # existing_rewards = existing_metadata.get("rewards", [])
+
+                # for reward in existing_rewards:
+                #     reward["membership"] = membership
+
+                # existing_metadata["expiry_date_memberShip"] = expiry_date_of_membership
+
+                # with open(metadata_path, "w") as metadata_file:
+                #     json.dump(existing_metadata, metadata_file)
+            # elif isReward:
+            #     reward = request.data.get("reward")
+            #     issue_date_reward = str(date.today())
+            #     expiry_date_of_reward = request.data.get("expiry_date_of_reward")
+
+            #     user = User.objects.get(account=user_address)
+            #     loyaltyNFT = Loyalty_NFT.objects.get(
+            #         token_id=token_id, user=user
+            #     )
+            #     token_id = loyaltyNFT.token_id
+
+            #     metadata_url = f"{user.account}/loyalty/{token_id}.json"
+            #     metadata_path = os.path.join(settings.MEDIA_ROOT, metadata_url)
+
+            #     with open(metadata_path, "r") as metadata_file:
+            #         existing_metadata = json.load(metadata_file)
+
+            #     existing_rewards = existing_metadata.get("rewards", [])
+
+            #     new_reward = {
+            #         "reward": reward,
+            #         "issue_date_reward": issue_date_reward,
+            #         "expiry_date_reward": expiry_date_of_reward,
+            #         "is_claimed": False,
+            #         "membership": membership,
+            #     }
+
+            #     existing_rewards.append(new_reward)
+            #     existing_metadata["rewards"] = existing_rewards
+
+            #     with open(metadata_path, "w") as metadata_file:
+            #         json.dump(existing_metadata, metadata_file)
+
+            # Loyalty_NFT.objects.filter(
+            #     token_id=token_id, user__account=user_address
+            # ).update(**update_fields)
+
+            # return Response({"status": "Success", "response": "NFT updated."})
+            
+        elif request_type == "claim_reward":
+            token_id = request.data.get("token_id")
             user_address = request.data.get("account")
-            receiver_address = request.data.get("receiver")
+            array_index = int(request.data.get("arr_index"))
+            
+            user = User.objects.get(account=user_address)
+            loyaltyNFT = Loyalty_NFT.objects.get(
+                token_id=token_id, user=user
+            )
+            token_id = loyaltyNFT.token_id
+            metadata_url = f"{user.account}/loyalty_nft/{token_id}.json"
+            metadata_path = os.path.normpath(os.path.join(settings.MEDIA_ROOT, metadata_url))
+            with open(metadata_path, "r") as metadata_file:
+                existing_metadata = json.load(metadata_file)
+                
+            existing_rewards = existing_metadata.get("rewards", [])
+            print(existing_rewards[array_index])
+            existing_rewards[array_index]["is_claimed"] = True
+            existing_metadata["rewards"] = existing_rewards
+            with open(metadata_path, "w") as metadata_file:
+                json.dump(existing_metadata, metadata_file)
+            return Response({"status": "Success", "response": "NFT updated successfully."})
+           
+        elif request_type == "view_reward":
+            # token_id = request.data.get("token_id")
+            user_address = Web3.toChecksumAddress(request.data.get("account"))
+            
+            receiver_address = Web3.toChecksumAddress(request.data.get("receiver"))
+            print("View Reward")
+            # print(token_id)
+            print(user_address, "User Address")
+            print(receiver_address)
+
 
             try:
-                user = User.objects.get(account=user_address)
-                loyalty_nft = Loyalty_NFT.objects.get(
-                    id=nft_id, user=user, wallet_address=receiver_address
+                print("Try")
+                user = User.objects.get(account=receiver_address)
+                print("User")
+                loyalty_nfts = Loyalty_NFT.objects.filter(
+                     user=user, wallet_address=receiver_address
                 )
+                
+                print("Loyal NFT")
+                
+                loyalty_nfts = list(loyalty_nfts)
+                print(loyalty_nfts)
+                
+                
+                nftList = []
+                
+                for loyalty_nft in loyalty_nfts:
+                    loyalty_nft_model = model_to_dict(loyalty_nft)
+                    loyalty_nft_model["nft_image"] = loyalty_nft.nft_image.url
+                    loyalty_nft_model["metadata"] = None
+                    loyalty_nft_model["timestamp"] = ""
+                    loyalty_nft_model["rewards"] = []
 
-                loyalty_nft_model = model_to_dict(loyalty_nft)
-                loyalty_nft_model["nft_image"] = loyalty_nft.nft_image.url
-                loyalty_nft_model["metadata"] = None
-                loyalty_nft_model["timestamp"] = ""
-                loyalty_nft_model["rewards"] = []
+                    if loyalty_nft.metadata:
+                        with loyalty_nft.metadata.open(mode="r") as metadata_file:
+                            metadata = json.load(metadata_file)
+                            loyalty_nft_model["metadata"] = metadata
+                            rewards = metadata.get("rewards")
+                            if rewards:
+                                loyalty_nft_model["rewards"] = rewards
+                                
+                    nftList.append(loyalty_nft_model)
 
-                if loyalty_nft.metadata:
-                    with loyalty_nft.metadata.open(mode="r") as metadata_file:
-                        metadata = json.load(metadata_file)
-                        loyalty_nft_model["metadata"] = metadata
-                        rewards = metadata.get("rewards")
-                        if rewards:
-                            loyalty_nft_model["rewards"] = rewards
-
-                return Response({"status": "Success", "response": loyalty_nft_model})
+                return Response({"status": "Success", "response": nftList})
             except User.DoesNotExist:
+                print("User DoesNotExist")
                 return Response({"status": "Failure", "response": "User not found."})
             except Loyalty_NFT.DoesNotExist:
                 return Response(
