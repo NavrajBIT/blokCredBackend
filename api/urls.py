@@ -12,11 +12,10 @@ urlpatterns = [
     path("issue", views.issue_certificates),
     path("approval", views.approve_order),
     path("payment", views.payment),
+    path("paypalpayment", views.paypal_payment),
+    path("promocode", views.promocode),
     path("nonEssCert", views.issue_nonEsseCert),
     path("subForDev", views.customSubscriptionForDev),
     path("dnft", views.create_batch),
-    # path("updatenft",views.update_reward_nft),
-    # path("viewnft",views.view_dnft_reward),
-    # path("claimreward",views.claim_reward),
     path("loyaltyNFT",views.mint_reward_nft),
 ]
