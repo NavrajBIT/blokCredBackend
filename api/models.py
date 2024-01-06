@@ -1,5 +1,6 @@
 from django.db import models
 import random
+import string
 
 def get_random_filename(filename):
     file_extension = filename.split(".")[-1]
@@ -15,10 +16,15 @@ def sign_file(instance, filename):
 def idProofApprover(instance, filename):
     return "/".join([str(instance.name), "idProofApprover", filename])
 
+def individual_nft_image(instance, filename):
+    filename = filename.replace(" ", "_")
+    return "/".join([str(instance.user.account), "Individual", filename])
 
 
 def template_base_image(instance, filename):
-    return "/".join([ str(instance.user.account), "template_base_image", instance.name, ".png"])
+    random_text = ''.join(random.choice(string.ascii_letters + string.digits + string.punctuation + ' ') for _ in range(5))
+    print(random_text)
+    return "/".join([ str(instance.user.account), "template_base_image", instance.name+random_text, ".png"])
 
 def certificate_image(instance, filename):
     return "/".join([ str(instance.user.account), "certificates", str(instance.id) + ".png"])
@@ -35,10 +41,6 @@ def batch_nft_student_image(instance, filename):
     print("Saving image of name ", filename)
     return "/".join(["batch_nft_image", str(instance.wallet_address), filename])
 
-
-
-
-
 def csv_file(instance, filename):
     filename = get_random_filename(filename)
     return "/".join([str(instance.user.account), "csv_file", filename])
@@ -51,6 +53,10 @@ def csv_fileNft(instance, filename):
 def csv_file(instance, filename):
     filename = get_random_filename(filename)
     return "/".join([str(instance.user.account), "csv_file", filename])
+
+def loyalty_nft_image(instance, filename):
+    filename = filename.replace(" ", "_")
+    return "/".join([str(instance.user.account), "loyalty_nft", filename])
 
 
 class Admin(models.Model):
@@ -145,6 +151,16 @@ class Certificate(models.Model):
     variable_values = models.JSONField()
     image = models.ImageField(upload_to=certificate_image, blank=True, null=True)
     metadata = models.FileField(upload_to=certificate_json, blank=True, null=True)
+    isMinted=models.BooleanField(default=False)
+    status_option = (
+        ("Pending", "Pending"),
+        ("Issued", "Issued"),
+        ("Failed", "Failed"),
+    )
+    status = models.CharField(
+        max_length=20, choices=status_option, default="Failed"
+    )
+    
 
 
 class Certificate_Order(models.Model):
@@ -182,3 +198,30 @@ class Students(models.Model):
     token_id = models.IntegerField(default=0)
     is_minted = models.BooleanField(default=False)
     email = models.EmailField(null=True, blank=True)
+    
+class Individual(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    wallet_address = models.CharField(max_length=50)
+    nft_image = models.ImageField(upload_to=individual_nft_image, blank=True, null=True)
+    metadata = models.FileField(upload_to=individual_nft_image, blank=True, null=True)
+    qr_x_pos = models.FloatField(default = 10)
+    qr_y_pos = models.FloatField(default = 10)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    token_id = models.IntegerField(default=0)
+    is_minted = models.BooleanField(default=False)
+    email = models.EmailField(null=True, blank=True)
+
+class Loyalty_NFT(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    wallet_address = models.CharField(max_length=50)
+    nft_image = models.ImageField(upload_to=loyalty_nft_image, blank=True, null=True)
+    metadata = models.FileField(upload_to=loyalty_nft_image, blank=True, null=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    token_id = models.IntegerField(default=0)
+    is_minted = models.BooleanField(default=False)
+
+class Promocode(models.Model):
+    created_by = models.ForeignKey(Admin, on_delete=models.CASCADE)
+    promo_id = models.CharField(max_length=10, unique=True)
+    discount = models.IntegerField(default=0)
+    is_active = models.BooleanField(default=False)

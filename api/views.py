@@ -2,6 +2,7 @@ from rest_framework.response import Response
 from rest_framework.decorators import api_view
 from django.shortcuts import render
 from django.http import HttpResponse
+from django.core.files.images import ImageFile
 from django.forms.models import model_to_dict
 from .contractcalls import (
     create_certificate,   
@@ -10,6 +11,7 @@ from .contractcalls import (
     get_contract_details,
     check_payment
 )
+import base64
 from .models import (
     Admin,
     User,
@@ -20,8 +22,13 @@ from .models import (
     Approver,
     Approval_OTP,
     Subscription,
-    Batch, Students
+    Batch, Students,
+    Individual,
+    Loyalty_NFT,
+    Promocode
+    
 )
+from django.db.models import Q
 from .contract_config import config
 from .storagecalls import get_metadata_url, get_all_nfts, upload_image, add_frame
 from web3 import Web3
@@ -38,11 +45,14 @@ from io import StringIO
 import random
 import ast
 # datetime
+import time
 from datetime import datetime, timedelta,date
 import pytz
 import os
 import sys
 import tempfile
+import shutil
+import boto3
 
 utc=pytz.UTC
 
@@ -56,6 +66,12 @@ from io import BytesIO
 from os.path import basename
 from django.core.files import File
 from urllib.request import urlopen
+import hashlib
+import io
+from email.mime.image import MIMEImage
+from email.mime.multipart import MIMEMultipart
+import threading
+
 
 BASE_DIR = settings.BASE_DIR
 BASE_URL = "https://bitmemoir.org"
@@ -65,15 +81,31 @@ FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
 
 
 def home_page(request):
+    if not User.objects.filter(
+        account=Web3.toChecksumAddress("0x58754d9b3dbB4ddF5AC3502AcB963743b15e6398")
+    ).exists():
+        User.objects.create(
+            account=Web3.toChecksumAddress("0x58754d9b3dbB4ddF5AC3502AcB963743b15e6398"),
+            name="The Hub",
+            description="THE HUB provides you with the picks and shovels to have a seamless Metaverse journey",
+            website="www.thehubdao.xyz",
+            email="andre.skauradssun@thedac.info",
+            country="Latin America",
+            issuerName="Andre",
+            issuerLastName="Skauradssun",
+            issuerDesignation="Intern",
+            status="Approved",
+            nft_quota=10,
+        )
     try:    
         Admin.objects.create(
-            name="Hemant",
+            name="Shubham",
             designation="Developer",
             account=Web3.toChecksumAddress(
-                "0xcebFD12bA1e85a797BFdf62081785E9103A96Dd3"
+                "0xb753F847356dEF957Dc809979fCB9B67d34daB32"
             ),
             added_by=Web3.toChecksumAddress(
-                "0xE858f0370b101cD3F58E03F18BFA1240a591b5Fa"
+                "0xb753F847356dEF957Dc809979fCB9B67d34daB32"
             ),
         )
     except Exception as e:
@@ -110,7 +142,11 @@ def add_dnfts(request):
     else:
         user = User.objects.create(account = Web3.toChecksumAddress("0x3209f70e21828337Ef4Fd10928024f0E582b3626") )
     if Batch.objects.filter(user=user, name = batch_name).exists():
-        return HttpResponse("<h1>Already exists </h1>")
+        batch = Batch.objects.get(user=user, name=batch_name)
+        new_students_file = "https://bitmemoir.s3.ap-south-1.amazonaws.com/static/0x3729cC643a60Bce47F087e829E69e6eCF0e656C8/csv_file_nft/template.csv"
+        batch.studentsFile = new_students_file
+        batch.save()
+        return HttpResponse("<h1>Updated </h1>")
     
     try:    
         image_url = "https://bitmemoir.s3.ap-south-1.amazonaws.com/static/0x3729cC643a60Bce47F087e829E69e6eCF0e656C8/dnfts/1.png"
@@ -148,6 +184,32 @@ def add_dnfts(request):
     except Exception as e:
         print(e)
     return HttpResponse("<h1>Latin certs </h1>")
+
+@api_view(["POST"])
+def nft_quota_filter(request):
+    account = Web3.toChecksumAddress(request.data["account"])
+    user = User.objects.get(account = account)
+    user.nft_quota = 10
+    user.save()
+    return HttpResponse("<h1>Updated </h1>")
+
+
+@api_view(["POST"])
+def add_dnftsfile(request):
+    batch_name = "Universidad Champagnat (Argentina)"
+    if User.objects.filter(account = Web3.toChecksumAddress("0x3729cC643a60Bce47F087e829E69e6eCF0e656C8") ).exists():
+        user = User.objects.get(account = Web3.toChecksumAddress("0x3729cC643a60Bce47F087e829E69e6eCF0e656C8") )
+    else:
+        user = User.objects.create(account = Web3.toChecksumAddress("0x3729cC643a60Bce47F087e829E69e6eCF0e656C8") )
+    if Batch.objects.filter(user=user, name = batch_name).exists():
+        batch = Batch.objects.get(user=user, name=batch_name)
+        new_students_file = "https://bitmemoir.s3.ap-south-1.amazonaws.com/static/0x3729cC643a60Bce47F087e829E69e6eCF0e656C8/csv_file_nft/template.csv"
+        image = urlopen(new_students_file)
+        django_file = File(image)
+        django_file.name = os.path.basename(new_students_file)
+        batch.studentsFile = django_file
+        batch.save()
+        return HttpResponse("<h1>Updated </h1>")
 
 
 @api_view(["POST", "GET"])
@@ -439,31 +501,108 @@ def get_nfts(request):
 
 def mint_souvenir(request):
     account = Web3.toChecksumAddress(request.data["account"])
-    image = request.data["image"]
+    image = Image.open(request.data["image"])
     asset_name = request.data["asset_name"]
     asset_description = request.data["asset_description"]
-    recipient = Web3.toChecksumAddress(request.data["recipient"])
+    recipient = request.data["recipient"]
+    recipient_email = request.data["recipientEmail"]
     frame = request.data["frame"]
     user = User.objects.get(account=account)
+    token_id = str(get_token_id(user.contract_address))
+
     if frame == "":
         framed_image = image
     else:
         framed_image = add_frame(base_image=image, frame_name=frame, user=user)
+
+    qr_data = "https://bitmemoir.com/verify/" + user.contract_address + "/" + token_id
+    qr = qrcode.QRCode(box_size=3)
+    print("adding qr code")
+    qr.add_data(qr_data)
+    qr.make()
+    qr_image = qr.make_image(fill_color="black", back_color="white")
+    image_width, image_height = framed_image.size
+    qr_width, qr_height = qr_image.size
+    # paste the QR code at the bottom-right corner of the image
+    framed_image.paste(qr_image, (image_width - qr_width, image_height - qr_height))
+
+    # Save the modified image to memory
+    image_bytes = BytesIO()
+    framed_image.save(image_bytes, format='PNG')
+    image_bytes.seek(0)
+
     contract_address = user.contract_address
-    metadata_url = save_souvenir(
+    metadata_url, asset_name = save_souvenir(
         asset_name=asset_name,
         asset_description=asset_description,
-        image=framed_image,
+        image=image_bytes,
         user=user,
     )
-    tx_hash = create_certificate(
-        account=recipient,
-        metadata=metadata_url,
-        contract_address=contract_address,
+
+    dir_path = str(BASE_DIR) + "/media/" + user.account + "/souvenirs/"
+    filepath = dir_path + asset_name + ".png"
+    files = open(filepath, "rb")
+
+    # handle cases based on provided parameters
+    if not recipient and not recipient_email:
+        return Response({"status": "Failed"})
+
+    if recipient and recipient_email:
+        print("calling 1")
+        tx_hash = create_certificate(
+            account=recipient,
+            metadata=metadata_url,
+            contract_address=contract_address,
+        )
+        user.total_souvenirs = user.total_souvenirs + 1
+        user.save()
+        send_souvenir_email(recipient_email, files, sender_name=user.name)
+    elif recipient:
+        print("calling 2")
+        tx_hash = create_certificate(
+            account=recipient,
+            metadata=metadata_url,
+            contract_address=contract_address,
+        )
+        user.total_souvenirs = user.total_souvenirs + 1
+        user.save()
+    elif recipient_email:
+        print("calling 3")
+        tx_hash = create_certificate(
+            account=user.account,
+            metadata=metadata_url,
+            contract_address=contract_address,
+        )
+        user.total_souvenirs = user.total_souvenirs + 1
+        user.save()
+        tx_hash = None
+        send_souvenir_email(recipient_email,files,sender_name=user.name)
+    return Response({"status": "Success", "response": tx_hash})
+
+
+def send_souvenir_email(recipient_email, files, sender_name):
+    image_bytes = BytesIO(files.read())
+    # Attach the image to the email message
+    attachment_name = 'nft_image.png'
+    attachment_data = image_bytes.getvalue()
+    attachment_type = "files/png"
+    subject = "A token of our appreciation"
+    message = (
+        f"<p>You've received an NFT from {sender_name} as a token of gratitude for your love and support. Feel free to share it on social media and don’t forget to tag #{sender_name.replace(' ', '')}.</p>"
+        f"<p>Manage all your NFTs using BIT Wallet. <a href='https://bitmemoir.com/#/bitwalletpage'> Download now</a></p>"
     )
-    user.total_souvenirs = user.total_souvenirs + 1
-    user.save()
-    return Response({"status": "Success", "response": "tx_hash"})
+    # sender = "shubham@beimagine.tech"
+    sender = "hello@beimagine.tech"
+    recipients = [recipient_email]
+    email = EmailMessage(
+        subject=subject,
+        body=message,
+        from_email=sender,
+        to=recipients,
+    )
+    email.attach(attachment_name, attachment_data, attachment_type)
+    email.content_subtype = 'html'
+    email.send(fail_silently=False)
 
 
 def mint_certificate(request):
@@ -860,13 +999,13 @@ def save_souvenir(image, user, asset_name, asset_description):
         str(BASE_URL) + "/media/" + user.account + "/souvenirs/" + asset_name + ".json"
     )
     print(metadata_url)
-    return metadata_url
+    return metadata_url, asset_name
 
 
 @api_view(["POST", "GET"])
 def verify_cert(request):
     print("Trying to verify...")
-    contract_address = request.data["contract_address"]
+    contract_address = Web3.toChecksumAddress(request.data["contract_address"])
     token_id = request.data["token_id"]
     print(contract_address)
     print(token_id)
@@ -880,7 +1019,10 @@ def verify_cert(request):
         return Response({"status": "Success", "response": "Invalid data."})
     is_verified = False
     print("checking user.")
+    print(contract_address)
     
+    var=User.objects.filter(contract_address="0xc61ed65a6ae143bb6b5dea69e35de721d421394b").exists()
+    print(var)
 
     if User.objects.filter(contract_address=contract_address).exists():
         print("user exists")
@@ -1032,7 +1174,7 @@ def issue_certificates(request):
     server_url = request.META.get('HTTP_REFERER', '')
     account = Web3.toChecksumAddress(request.data["account"])
     user = User.objects.get(account=account)    
-    subscription = Subscription.objects.get(user=user)
+    # subscription = Subscription.objects.get(user=user)
     template_id = request.data["template_id"]
     template = Template.objects.get(pk=template_id)
     file = request.data["file"]
@@ -1040,7 +1182,9 @@ def issue_certificates(request):
     file = order.file.read().decode("utf-8")
     csv_data = list(csv.reader(StringIO(file), delimiter=","))
     cert_no = len(csv_data) - 1
-    if (cert_no >= user.nft_quota or subscription.end_Date <= timezone.now()):
+    print("calling")
+    if (cert_no >= user.nft_quota):
+        # or subscription.end_Date <= timezone.now()):
         return Response(
             {
                 "status": "Failed",
@@ -1063,14 +1207,14 @@ def issue_certificates(request):
             template=template,
             recipient=Web3.toChecksumAddress(csv_data[s_no][len(csv_data[0]) - 2]),
             email=csv_data[s_no][len(csv_data[0]) - 1],
-            image_url="",
-            metadata_url="",
+            # image_url="",
+            # metadata_url="",
             variable_values=variables
         )
         order.certificates.add(certificate)
         order.save()
     if len(list(user.approvers.all())) == 0:
-        execute_certificate_order(order,server_url)
+        execute_certificate_order(order,server_url,user)
         return Response(
             {
                 "status": "Success",
@@ -1083,7 +1227,8 @@ def issue_certificates(request):
             approval = Approval_OTP.objects.create(
                 approver=approver, order=order, otp=otp
             )
-            send_cert_approval_email(approval)
+            print("calling approver")
+            send_cert_approval_email(approval,file)
         return Response(
             {
                 "status": "Success",
@@ -1093,54 +1238,76 @@ def issue_certificates(request):
 
 @api_view(["POST", "GET"])
 def issue_nonEsseCert(request):
-    server_url = request.META.get('HTTP_REFERER', '')
-    print(server_url)
-    account = Web3.toChecksumAddress(request.data["account"])
-    user = User.objects.get(account=account)    
-    subscription = Subscription.objects.get(user=user)
-    print("here --------------------")
-    template_id = request.data["template_id"]
-    template = Template.objects.get(pk=template_id)
-    file = request.data["file"]
-    order = Certificate_Order.objects.create(user=user, template=template, file=file)
-    file = order.file.read().decode("utf-8")
-    csv_data = list(csv.reader(StringIO(file), delimiter=","))
-    cert_no = len(csv_data) - 1
-    if (cert_no >= user.nft_quota or subscription.end_Date <= timezone.now()):
+    try:
+        server_url = request.META.get('HTTP_REFERER', '')
+        print(server_url)
+        account = Web3.toChecksumAddress(request.data["account"])
+        user = User.objects.get(account=account) 
+        print(user)
+        # subscription = Subscription.objects.get(user=user)
+        # print(subscription)
+        print("here --------------------")
+        template_id = request.data["template_id"]
+        print(template_id)
+        template = Template.objects.get(pk=template_id)
+        file = request.data["file"]
+        order = Certificate_Order.objects.create(user=user, template=template, file=file)
+        file = order.file.read().decode("utf-8")
+        csv_data = list(csv.reader(StringIO(file), delimiter=","))
+        cert_no = len(csv_data) - 1
+        
+        if (cert_no > user.nft_quota ): 
+            # or subscription.end_Date <= timezone.now()):
+            print("Not enough balance/SUBSCRIPTION EXPIRED")
+            return Response(
+                {
+                    "status": "Failed",
+                    "response": "Not enough balance/SUBSCRIPTION EXPIRED",
+                }
+            )
+        else:
+            user.nft_quota = user.nft_quota - cert_no
+            user.save()
+        variable_name_index = {}
+        for index in enumerate(csv_data[0]):
+            if index[0] != 0 and index[0] < len(csv_data[0]) - 2:
+                variable_name_index[csv_data[0][index[0]]] = index[0]
+        for s_no in range(1, len(csv_data)):
+            variables = {}
+            for variable in variable_name_index.keys():
+                variables[variable] = csv_data[s_no][variable_name_index[variable]]   
+            print("Creating certificates..")  
+            print(user)  
+            print(template) 
+            print(variables)
+            print(Web3.toChecksumAddress(csv_data[s_no][len(csv_data[0]) - 2]))
+            certificate = Certificate.objects.create(
+                user=user,
+                template=template,
+                recipient=Web3.toChecksumAddress(csv_data[s_no][len(csv_data[0]) - 2]),
+                email=csv_data[s_no][len(csv_data[0]) - 1],
+                variable_values=variables,
+                status="Pending"
+            )
+            print("created")
+            order.certificates.add(certificate)
+            order.save()
+        t = threading.Thread(target=execute_certificate_order, args=(order, server_url, user))
+        t.start()
+        return Response(
+            {
+                "status": "Success",
+                "response": "issued",
+            }
+        )
+    except Exception as e:
+        print(e)
         return Response(
             {
                 "status": "Failed",
-                "response": "Not enough balance/SUBSCRIPTION EXPIRED",
+                "response": e,
             }
         )
-    else:
-        user.nft_quota = user.nft_quota - cert_no
-        user.save()
-    variable_name_index = {}
-    for index in enumerate(csv_data[0]):
-        if index[0] != 0 and index[0] < len(csv_data[0]) - 2:
-            variable_name_index[csv_data[0][index[0]]] = index[0]
-    for s_no in range(1, len(csv_data)):
-        variables = {}
-        for variable in variable_name_index.keys():
-            variables[variable] = csv_data[s_no][variable_name_index[variable]]   
-        print("Creating certificates..")     
-        certificate = Certificate.objects.create(
-            user=user,
-            template=template,
-            recipient=Web3.toChecksumAddress(csv_data[s_no][len(csv_data[0]) - 2]),
-            email=csv_data[s_no][len(csv_data[0]) - 1],
-            variable_values=variables
-        )
-        order.certificates.add(certificate)
-        order.save()    
-    execute_certificate_order(order,server_url)
-    return Response(
-        {
-            "status": "Success",
-            "response": "issued",
-        }
-    )
 
     
 def create_certificate_from_template(certificate, token_id,server_url):
@@ -1149,77 +1316,126 @@ def create_certificate_from_template(certificate, token_id,server_url):
     base_image = Image.open(template.base_image)
     width, height = base_image.size
     cert = ImageDraw.Draw(base_image)
-    for variable in template.variables.all():
-        text_box_width = variable.width * width / 100
-        text_box_height = int(variable.height * height / 100)
-        if variable.type == "text":
-            text_box_pos_x = variable.x_pos * width / 100
-            text_box_pos_y = variable.y_pos * height / 100 - text_box_height / 2
-            x, y, w, h = cert.textbbox(
-                (0, 0),
-                variables[variable.name],
-                font=ImageFont.truetype(FONT_PATH, text_box_height),
-            )
-            cert.text(
-                (text_box_pos_x - w / 2, text_box_pos_y),
-                variables[variable.name],
-                fill=variable.color,
-                font=ImageFont.truetype(FONT_PATH, text_box_height),
-            ),
-        elif variable.type == "qr":
-            print("Image size =", height)
-            print("QR size ", int(variable.height * height / 100))
-            qr = qrcode.QRCode(version=None, box_size=3)
-            qr_data = server_url+ "#/verify/" + template.user.contract_address + "/" + str(token_id)
-            print(qr_data)
-            qr.add_data(qr_data)
-            qr.make(fit=True)
-            qr_image = qr.make_image(
-                    fill_color=variable.color, back_color=(255, 255, 255, 0)
-            )
-            qr_image = qr_image.resize((text_box_height, text_box_height))
-            mask = qr_image.convert("L").point(lambda x: 255 - x)
-            base_image.paste(qr_image, (int(variable.x_pos * width / 100), int(variable.y_pos * height / 100 - text_box_height / 2)), mask=mask)
-   
-    image_io = BytesIO()
-    base_image.save(image_io, format='PNG')
-    image_file = ContentFile(image_io.getvalue())
-    certificate.image.save("", image_file)
-    asset_name = " ".join([template.name, "Issued by", template.user.name])
-    description = ""
-    for variable in variables.keys():
-        description = description + variable + ": " + variables[variable] + ",  "
-    metadata = {
-        "name": asset_name,
-        "description": description,
-        "image": str(certificate.image.url),
-    }
-    json_data = json.dumps(metadata).encode()
-    content = ContentFile(json_data)
-    certificate.metadata.save("", content)
-    certificate.token_id = token_id
-    certificate.save()
-    metadata_url = certificate.metadata.url
+    try:
+        for variable in template.variables.all():
+            text_box_width = variable.width * width / 100
+            text_box_height = int(variable.height * height / 100)
+            if variable.type == "qr":
+                text_box_height = int((variable.height + 3) * height / 100)
+            if variable.type == "text":
+                text_box_pos_x = variable.x_pos * width / 100
+                text_box_pos_y = variable.y_pos * height / 100 - text_box_height / 2
+                x, y, w, h = cert.textbbox(
+                    (0, 0),
+                    variables[variable.name],
+                    font=ImageFont.truetype(FONT_PATH, text_box_height),
+                )
+                cert.text(
+                    (text_box_pos_x - w / 2, text_box_pos_y),
+                    variables[variable.name],
+                    fill=variable.color,
+                    font=ImageFont.truetype(FONT_PATH, text_box_height),
+                ),
+            elif variable.type == "qr":
+                print("Image size =", height,width)
+                print("QR size ", int(variable.height * height / 100))
+                print(variable.color)
+                qr = qrcode.QRCode(version=None, box_size=3)
+                qr_data = server_url+ "#/verify/" + template.user.contract_address + "/" + str(token_id)
+                print(qr_data)
+                qr.add_data(qr_data)
+                qr.make(fit=True)
+                qr_image = qr.make_image(
+                        fill_color=variable.color, back_color=(255, 255, 255, 0)
+                )
+                qr_image = qr_image.resize((text_box_height, text_box_height))
+                mask = qr_image.convert("L").point(lambda x: 255 - x)
+                print(int((variable.x_pos - 2) * width / 100 - text_box_height / 2))
+                print(int(variable.y_pos * height / 100 - text_box_height / 2))
+                print(variable.color)
+                # base_image.paste(qr_image, (int((variable.x_pos - 2) * width / 100 - text_box_height / 2), int(variable.y_pos * height / 100 - text_box_height / 2)))
+                # base_image.paste(qr_image, (int(variable.x_pos * width / 100), int(variable.y_pos * height / 100 - text_box_height / 2)), mask=mask)
+                base_image.paste(qr_image,(int((variable.x_pos - 2) * width / 100 - text_box_height / 2),int(variable.y_pos * height / 100 - text_box_height / 2)),mask=mask)
+                
+                
+        image_io = BytesIO()
+        base_image.save(image_io, format='PNG')
+        image_file = ContentFile(image_io.getvalue())
+        print("check1")
+        certificate.image.save("", image_file)
+        print("check2")
+        asset_name = " ".join([template.name, "Issued by", template.user.name])
+        print(asset_name)
+        description = ""
+        for variable in variables.keys():
+            description = description + variable + ": " + variables[variable] + ",  "
+            
+        timestamp = datetime.now()
+        # print(timestamp)
+        metadata = {
+            "name": asset_name,
+            "description": description,
+            "image": str(certificate.image.url),
+            "timeStamp":str(timestamp)
+        }
+        print(metadata)
+        json_data = json.dumps(metadata).encode()
+        content = ContentFile(json_data)
+        print("saving metadata started")
+        certificate.metadata.save("", content)
+        print("saved metdata")
+        certificate.token_id = token_id
+        certificate.save()
+        metadata_url = certificate.metadata.url
+        
+        return (certificate.image.url)
+        
+    except Exception as e:
+        print("Error in funtion create_certificate_from_template")
+        print(e)
+        
+        return False
+    
     return metadata_url
 
-def execute_certificate_order(order,server_url):      
-    for certificate in order.certificates.all():       
-        create_certificate_from_template(certificate=certificate, token_id=0, server_url=server_url)
-        metadata_url = certificate.metadata.url
-        token_id = create_certificate(
-            account=certificate.recipient,
-            metadata=metadata_url,
-            contract_address=order.user.contract_address,
-        )
-        print(token_id)
-        print(metadata_url)
-        create_certificate_from_template(certificate=certificate, token_id=token_id,server_url=server_url)
+def execute_certificate_order(order,server_url,user):      
+    for certificate in order.certificates.all():    
+        try:   
+            create_certificate_from_template(certificate=certificate, token_id=0, server_url=server_url)
+            metadata_url = certificate.metadata.url
+            token_id = create_certificate(
+                account=certificate.recipient,
+                metadata=metadata_url,
+                contract_address=order.user.contract_address,
+            )
+            user.total_certificates = user.total_certificates + 1
+            user.save()
+            certificate.isMinted = True 
+            certificate.status="Issued"  
+            certificate.save()
+            print(token_id)
+            print(metadata_url)
+            isMinted=create_certificate_from_template(certificate=certificate, token_id=token_id,server_url=server_url)
+            if isMinted != False:
+                try:
+                    receiverEmail = certificate.email
+                    if receiverEmail:
+                        print('Sending Email....')
+                        send_dnft_email(recipient=str(receiverEmail), sender_name=user.name, link= server_url+"#/verify/" + user.contract_address + "/" + str(token_id),file=isMinted)
+                except Exception as e:
+                    print("Email exception")
+            time.sleep(5)
+        except Exception as e:
+            certificate.status="Failed"  
+            certificate.save()
+            print(e)
+            print("Something went wrong in execute_certificate_order ")
     order.fulfilled = True
     order.save()
     
 
 
-def send_cert_approval_email(approval):
+def send_cert_approval_email(approval,file):
     subject = "Certificate issuance approval request."
     greeting = "Hi " + approval.approver.name + ","
     first_line = "Your approval is required for certificate issuance."
@@ -1258,7 +1474,12 @@ def send_cert_approval_email(approval):
         from_email=sender,
         to=recipients,
     )
-    # email.attach_file(file)
+    # Attach the CSV file
+    attachment_name = "data.csv"
+    attachment_data = file.encode()
+    attachment_type = "text/csv"
+
+    email.attach(attachment_name, attachment_data, attachment_type)
     email.send(fail_silently=False)
 
 
@@ -1354,7 +1575,14 @@ def customSubscriptionForDev(request):
         }
     )  
 
-def send_dnft_email(recipient, file, sender_name, link):
+def send_dnft_email(recipient, sender_name, link,file):
+  
+    
+    image_url=file
+    response = requests.get(image_url)
+    image_data = response.content
+
+    # Create an EmailMessage object
     subject = sender_name
     message = (
         "Hi"        
@@ -1365,7 +1593,6 @@ def send_dnft_email(recipient, file, sender_name, link):
         + link + "\n\n"
         + "Thanks and Regards \n"
         + "Beyond Imagination Technologies \n"
-        + "https:\\www.bitmemoirlatam.com"
     )
     sender = "hello@beimagine.tech"
     recipients = [recipient]
@@ -1375,7 +1602,13 @@ def send_dnft_email(recipient, file, sender_name, link):
         from_email=sender,
         to=recipients,
     )
-    email.send(fail_silently=False)
+    # Attach the image to the email
+    image_name = image_url.split('/')[-1]
+    email.attach(image_name, image_data, response.headers.get('Content-Type'))
+
+    # Send the email
+    email.send()
+
 
 @api_view(["POST", "GET"])
 def create_batch(request):
@@ -1411,7 +1644,16 @@ def create_batch(request):
             batch.save()
             print("Batch created ", model_to_dict(batch))
             file = batch.studentsFile.read().decode("utf-8")
-            csv_data = list(csv.reader(StringIO(file), delimiter=","))        
+            csv_data = list(csv.reader(StringIO(file), delimiter=","))  
+            cert_no = len(csv_data) - 1
+            if (cert_no >= user.nft_quota ): 
+                # or subscription.end_Date <= timezone.now()):
+                return Response(
+                    {
+                        "status": "Failed",
+                        "response": "Not enough balance/SUBSCRIPTION EXPIRED",
+                    }
+                )      
             for student_index in range(1, len(csv_data)):
                 studentWallet= Web3.toChecksumAddress(csv_data[student_index][1])
                 token_id = get_token_id(contract_address=batch.user.contract_address)
@@ -1462,6 +1704,8 @@ def create_batch(request):
                         student.is_minted = True
                         student.save()
                     os.unlink(f.name)
+                    user.nft_quota = user.nft_quota-1
+                    user.save()
                     try:
                         studentEmail= csv_data[student_index][2]
                         print(studentEmail)
@@ -1609,7 +1853,170 @@ def create_batch(request):
                 student.is_minted = True
                 student.save()
             os.unlink(f.name)
-
+        elif request_type == "create_individual":
+            account = Web3.toChecksumAddress(request.data["account"])
+            wallet_address = Web3.toChecksumAddress(request.data["name"])
+            # name = request.data["name"]
+            description = request.data["description"]
+            nft_image = request.data["nft_image"]
+            x_pos = request.data["x_pos"]
+            y_pos = request.data["y_pos"]
+            user = User.objects.get(account=account)
+            token_id = get_token_id(contract_address=user.contract_address)
+            individual = Individual.objects.create(
+                user=user,
+                wallet_address=wallet_address,
+                # nft_image = nft_image,
+                token_id=token_id,
+                qr_x_pos = x_pos,
+                qr_y_pos = y_pos,
+            )
+            if (user.nft_quota == 0 ): 
+                # or subscription.end_Date <= timezone.now()):
+                return Response(
+                    {
+                        "status": "Failed",
+                        "response": "Not enough balance/SUBSCRIPTION EXPIRED",
+                    }
+            ) 
+            print("-------calling------")
+            metadata = {
+                "description": description,
+                "image": "https://bitmemoir.s3.ap-south-1.amazonaws.com/static/" + user.account + "/dnfts/" + str(token_id) + ".png"
+            }
+            imageUrl="https://bitmemoir.s3.ap-south-1.amazonaws.com/static/" + user.account + "/dnfts/" + str(token_id) + ".png"
+            json_data = json.dumps(metadata).encode()
+            content = ContentFile(json_data)
+            try:
+                metadata_url = "https://bitmemoir.s3.ap-south-1.amazonaws.com/static/" + user.account + "/dnfts/" + str(token_id) + ".json"
+                token_id = create_certificate(
+                    account=wallet_address,
+                    metadata=metadata_url,
+                    contract_address=user.contract_address,
+                )
+                print("Token id: ", token_id)
+                base_image = Image.open(nft_image)
+                width, height = base_image.size
+                x_pos = request.data["x_pos"]
+                y_pos = request.data["y_pos"]
+                text_box_height = int(width * 0.1)
+                qr = qrcode.QRCode(version=None, box_size=3)
+                qr_data = "https:www.bitmemoirlatam.com/#/verify/"+ individual.user.contract_address+"/"+str(token_id)
+                qr.add_data(qr_data)
+                qr.make(fit=True)
+                qr_image = qr.make_image(
+                    fill_color=(0, 0, 0), back_color=(255, 255, 255, 0)
+                )
+                qr_image = qr_image.resize((text_box_height, text_box_height))
+                mask = qr_image.convert("L").point(lambda x: 255 - x)
+                base_image.paste(
+                    qr_image,
+                    (int(width * float(x_pos) / 100), int(height * float(y_pos) / 100)),
+                    mask=mask
+                )
+                
+                # Save updated NFT image and metadata to the database
+                output = BytesIO()
+                base_image.save(output, format='PNG', quality=85)
+                output.seek(0)
+                with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
+                    f.write(output.getvalue())
+                    individual.nft_image.save(str(token_id) + ".png", f)
+                    individual.metadata.save(str(token_id) + ".json", content)
+                    individual.is_minted = True
+                    individual.save()
+                os.unlink(f.name)
+                try:
+                    student_email = request.data.get("email")
+                    if student_email:
+                        individual.email = student_email
+                        individual.save()
+                        send_dnft_email(recipient=str(individual.email), sender_name=user.name, link="https://www.bitmemoirlatam.com/#/verify/" + user.contract_address + "/" + str(token_id),file=imageUrl)
+                except Exception as e:
+                    print("Email exception")
+                    print(e)
+            except Exception as e:
+                print(e)
+            
+            user.nft_quota = user.nft_quota-1
+            user.save()
+            return Response({"status": "success"})
+        
+        elif request_type == "update_nft":
+            print("Updating NFT...")
+            account = Web3.toChecksumAddress(request.data["account"])
+            user = User.objects.get(account=account)
+            token_id = request.data["token_id"]
+            individual = Individual.objects.get(user=user, token_id=token_id)
+            x_pos = request.data["x_pos"]
+            y_pos = request.data["y_pos"]
+            nft_image = request.data["nft_image"]
+            base_image = Image.open(nft_image)
+            width, height = base_image.size
+            text_box_height = int(width * 0.1)
+            qr = qrcode.QRCode(version=None, box_size=3)
+            qr_data = "https:www.bitmemoirlatam.com/#/verify/"+user.contract_address+"/"+str(token_id)
+            qr.add_data(qr_data)
+            qr.make(fit=True)
+            qr_image = qr.make_image(fill_color=(0, 0, 0), back_color=(255, 255, 255, 0))
+            qr_image = qr_image.resize((text_box_height, text_box_height))
+            mask = qr_image.convert("L").point(lambda x: 255 - x)
+            base_image.paste(qr_image, (int(width * float(x_pos) / 100), int(height * float(y_pos) / 100)), mask=mask)
+            output = BytesIO()
+            base_image.save(output, format='PNG', quality=85)
+            output.seek(0)
+            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
+                f.write(output.getvalue())
+                individual.nft_image.save(str(token_id) + ".png", f)
+                individual.save()
+            os.unlink(f.name)
+            return Response({
+                "status": "Success",
+                "response": "updated"
+            })
+        elif request_type == "read_individual":
+            account = Web3.toChecksumAddress(request.data["account"])
+            user = User.objects.get(account=account)
+            all_individual = list(Individual.objects.filter(user=user))
+            individual_list = []
+            for individual in all_individual:
+                individual_model = model_to_dict(individual)
+                try:
+                    individual_model["nft_image"] = individual.nft_image.url
+                    if individual.metadata:
+                        individual_model["metadata"] = individual.metadata.url
+                    else:
+                        individual_model["metadata"] = None
+                    individual_model["timestamp"] = ""
+                    individual_list.append(individual_model)
+                except Exception as e:
+                    print(e)
+            print(individual_list)
+            return Response({
+                "status": "success",
+                "response": individual_list
+            })
+            
+        elif request_type == "read1":
+            account = Web3.toChecksumAddress(request.data["account"])
+            user=User.objects.get(account=account)
+            individuals=list(Individual.objects.filter(user=user))
+            print(individuals)
+            individual_list=[]
+            for individual in individuals:
+                individual_model=model_to_dict(individual)
+                try:
+                    individual_model["nft_image"]=individual.nft_image.url
+                    individual_model["metadata"]=individual.metadata.url
+                    individual_model["timestamp"]=individual.timestamp
+                    individual_list.append(individual_model)
+                except Exception as e:
+                    print(e)
+            
+            return Response({
+                "status":"Success",
+                "response":individual_list
+            })
             
         return Response(
             {
@@ -1617,8 +2024,549 @@ def create_batch(request):
                 "response": "issued",
             }
         )
+    
     except Exception as e:
         print("Printing net exception...")
         print(e)
         
-     
+
+@api_view(["POST", "GET"])
+def mint_reward_nft(request):
+    try:
+        request_type = request.data.get("request_type")
+
+        if request_type == "mint_nft":
+            account = Web3.toChecksumAddress(request.data.get("account"))
+            receiver = Web3.toChecksumAddress(request.data.get("receiver"))
+            nft_image = request.FILES.get("image")
+            user = User.objects.get(account=account)
+            token_id = get_token_id(contract_address=user.contract_address)
+            nameOfOrg = request.data.get("nameOfOrg")
+            isMembership = request.data.get("isMembership") == "true"
+            membership = request.data.get("membership")
+            issue_date_nft = date.today().isoformat()
+            isReward = request.data.get("isReward") == "true"
+            reward = request.data.get("reward")
+            issue_date_reward = str(date.today())
+            expiry_date_of_reward = request.data.get("expiry_date_of_reward")
+            expiry_date_of_membership = request.data.get("expiry_date_of_membership")
+
+            loyaltyNFT = Loyalty_NFT.objects.create(
+                user=user,
+                wallet_address=receiver,
+                token_id=token_id,
+            )
+            if (user.nft_quota == 0 ): 
+                # or subscription.end_Date <= timezone.now()):
+                return Response(
+                    {
+                        "status": "Failed",
+                        "response": "Not enough balance/SUBSCRIPTION EXPIRED",
+                    }
+            ) 
+
+            try:
+                metadata = {
+                    "nameOfOrg": nameOfOrg,
+                    "image": "https://bitmemoir.s3.ap-south-1.amazonaws.com/static/" + user.account + "/loyalty_nft/" + str(token_id)+ ".png",
+                    "issue_date_nft": issue_date_nft,
+                    "membership": membership,
+                    "expiry_date_memberShip": expiry_date_of_membership,
+                    "reward": [],
+                }
+
+                if isMembership:
+                    metadata["membership"] = membership
+                    metadata["expiry_date_memberShip"] = expiry_date_of_membership
+
+                if isReward:
+                    rewards = [
+                        {
+                            "reward": reward,
+                            "issue_date_reward": issue_date_reward,
+                            "expiry_date_reward": expiry_date_of_reward,
+                            "is_claimed": False,
+                        }
+                    ]
+                    metadata["rewards"] = rewards
+
+                json_data = json.dumps(metadata)
+                encoded_data = json_data.encode('utf-8')  # Encode the string before hashing
+
+                # Hash the encoded data
+                metadata_hash = hashlib.sha256(encoded_data).hexdigest()
+
+                content = ContentFile(encoded_data)
+
+                metadata_url = "https://bitmemoir.s3.ap-south-1.amazonaws.com/static/" + user.account + "/loyalty_nft/" + str(token_id)+ ".json"
+                print("calling")
+                token_id = create_certificate(
+                    account=receiver,
+                    metadata=metadata_url,
+                    contract_address=user.contract_address,
+                )
+                base_image = Image.open(nft_image)
+                with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+                    base_image.save(f, format="PNG")
+                    loyaltyNFT.nft_image.save(f"{token_id}.png", f)
+                    loyaltyNFT.metadata.save(f"{token_id}.json", content)
+                    loyaltyNFT.is_minted = True
+                    loyaltyNFT.save()
+
+                os.unlink(f.name)
+                
+                            
+                user.nft_quota = user.nft_quota-1
+                user.save()
+
+                return Response({"status": "Success", "response": token_id})
+
+            except Exception as e:
+                print(e)
+                return Response({"status": "Failure", "response": "Invalid data."})
+
+        elif request_type == "update_nft":
+            token_id = request.data.get("token_id")
+            user_address = Web3.toChecksumAddress(request.data.get("account"))
+            nft_image = request.FILES.get("image")
+            isMembership = request.data.get("isMembership")
+            isReward = request.data.get("isReward")
+            membership = request.data.get("membership")
+            expiry_date_of_membership = request.data.get("expiry_date_of_membership")
+            reward = request.data.get("reward")
+            issue_date_reward = str(date.today())
+            expiry_date_of_reward = request.data.get("expiry_date_of_reward")
+            user = User.objects.get(account=user_address)
+            loyaltyNFT = Loyalty_NFT.objects.get(token_id=token_id, user=user)
+            print("isMembership", isMembership)
+            print("isReward", isReward)
+            if nft_image:
+                base_image = Image.open(nft_image)
+                base_image.seek(0)
+                print("Replacing image triggered")
+                with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
+                    base_image.save(f.name, format='PNG')
+                    loyaltyNFT.nft_image.save(str(token_id) + ".png", f)
+                    loyaltyNFT.save()
+                    print("Image replaced")
+                os.unlink(f.name)
+            new_metadata = {}  # Create a new metadata dictionary
+            if loyaltyNFT.metadata:
+                with loyaltyNFT.metadata.open(mode="r") as metadata_file:
+                    existing_metadata = json.load(metadata_file)
+                    new_metadata = existing_metadata.copy()
+
+            if isMembership == "true" and isReward == "true":
+                existing_membership = new_metadata.get("membership", [])
+                if not isinstance(existing_membership, list):
+                    existing_membership = [existing_membership]  # Convert string to list if necessary
+                existing_membership.append(membership)
+                print("done1")
+
+                existing_expiry_dates = new_metadata.get("expiry_date_membership", [])
+                existing_expiry_dates.append(expiry_date_of_membership)
+                new_metadata["expiry_date_membership"] = existing_expiry_dates
+
+                existing_rewards = new_metadata.get("rewards", [])
+                existing_rewards.append(
+                    {
+                        "reward": reward,
+                        "issue_date_reward": issue_date_reward,
+                        "expiry_date_reward": expiry_date_of_reward,
+                        "is_claimed": False,
+                    }
+                )
+                new_metadata["rewards"] = existing_rewards
+
+            elif isMembership == "true":
+                existing_membership = new_metadata.get("membership", [])
+                existing_membership.append(membership)
+                new_metadata["membership"] = existing_membership
+
+                existing_expiry_dates = new_metadata.get("expiry_date_membership", [])
+                existing_expiry_dates.append(expiry_date_of_membership)
+                new_metadata["expiry_date_membership"] = existing_expiry_dates
+
+            elif isReward == "true":
+                existing_rewards = new_metadata.get("rewards", [])
+                existing_rewards.append(
+                    {
+                        "reward": reward,
+                        "issue_date_reward": issue_date_reward,
+                        "expiry_date_reward": expiry_date_of_reward,
+                        "is_claimed": False,
+                    }
+                )
+                new_metadata["rewards"] = existing_rewards
+
+            temp_metadata_file = tempfile.NamedTemporaryFile(delete=False)
+            with open(temp_metadata_file.name, "w") as file:
+                json.dump(new_metadata, file)
+
+            loyaltyNFT.metadata.delete()  # Delete the old metadata file
+            metadata_file_name = f"{token_id}.json"
+            loyaltyNFT.metadata.save(metadata_file_name, File(open(temp_metadata_file.name, "rb")))
+
+            loyaltyNFT.save()
+            return Response(
+                {"status": "Success", "response": "NFT updated successfully."}
+            )
+
+        elif request_type == "claim_reward":
+            print("calling")
+            token_id = request.data.get("token_id")
+            wallet_address = Web3.toChecksumAddress(request.data.get("account"))
+            print(wallet_address)
+            array_index = int(request.data.get("arr_index"))
+            loyaltyNFT = Loyalty_NFT.objects.get(token_id=token_id, wallet_address=wallet_address)
+
+            metadata = loyaltyNFT.metadata
+            print("________________")
+            print(metadata)
+            if metadata:
+                with metadata.open(mode="r") as metadata_file:
+                    existing_metadata = json.load(metadata_file)
+
+                new_metadata = {}
+                if existing_metadata:
+                    new_metadata = existing_metadata.copy()
+
+                    existing_rewards = new_metadata.get("rewards", [])
+
+                    if array_index < len(existing_rewards):
+                        existing_rewards[array_index]["is_claimed"] = True
+
+                    new_metadata["rewards"] = existing_rewards
+
+                # Create a temporary file to write the updated metadata
+                temp_metadata_file = tempfile.NamedTemporaryFile(delete=False)
+                with open(temp_metadata_file.name, "w") as file:
+                    json.dump(new_metadata, file)
+
+                loyaltyNFT.metadata.delete()  # Delete the old metadata file
+                metadata_file_name = f"{token_id}.json"
+                loyaltyNFT.metadata.save(metadata_file_name, File(open(temp_metadata_file.name, "rb")))
+
+                # Remove the temporary file
+                os.remove(temp_metadata_file.name)
+
+                loyaltyNFT.save()
+
+                return Response(
+                    {
+                        "status": "Success",
+                        "response": "Reward claimed successfully.",
+                    }
+                )
+            else:
+                return Response(
+                    {"status": "Failure", "response": "Metadata not found."}
+                )
+            
+        elif request_type == "view_reward":
+            user_address = Web3.toChecksumAddress(request.data.get("account"))
+            receiver_address = Web3.toChecksumAddress(request.data.get("receiver"))
+            print(user_address, "User Address")
+            print(receiver_address)
+
+            try:
+                print("Try")
+                user = User.objects.get(account=user_address)
+                print(user)
+                loyalty_nfts = Loyalty_NFT.objects.filter(
+                    user=user, wallet_address=receiver_address
+                )
+
+                print("Loyal NFT")
+                print(loyalty_nfts)
+                loyalty_nfts = list(loyalty_nfts)
+                print(loyalty_nfts)
+
+                nftList = []
+
+                for loyalty_nft in loyalty_nfts:
+                    loyalty_nft_model = model_to_dict(loyalty_nft)
+                    loyalty_nft_model["nft_image"] = loyalty_nft.nft_image.url
+                    loyalty_nft_model["metadata"] = None
+                    loyalty_nft_model["timestamp"] = ""
+                    loyalty_nft_model["rewards"] = []
+
+                    if loyalty_nft.metadata:
+                        with loyalty_nft.metadata.open(mode="r") as metadata_file:
+                            metadata = json.load(metadata_file)
+                            loyalty_nft_model["metadata"] = metadata
+                            rewards = metadata.get("rewards")
+                            if rewards:
+                                loyalty_nft_model["rewards"] = rewards
+
+                    nftList.append(loyalty_nft_model)
+                    print(nftList)
+
+                return Response({"status": "Success", "response": nftList})
+            except User.DoesNotExist:
+                print("User DoesNotExist")
+                return Response({"status": "Failure", "response": "User not found."})
+            except Loyalty_NFT.DoesNotExist:
+                return Response(
+                    {"status": "Failure", "response": "Loyalty NFT not found."}
+                )
+
+        else:
+            return Response({"status": "Failure", "response": "Invalid request type."})
+
+    except Exception as e:
+        print(e)
+        return Response({"status": "Failure", "response": "Invalid data."})
+
+
+def get_payment_amount(cert_number, discount):
+    cert_number = int(cert_number)
+    amount_per_cert = 2
+    if cert_number > 100:
+        amount_per_cert = 1.75
+    if cert_number >= 1000:
+        amount_per_cert = 1.5
+    return cert_number * amount_per_cert * (1 - discount / 100)
+
+
+@api_view(["POST"])
+def paypal_payment(request):
+    user_address = request.data["user_address"]
+    payment_id = request.data["payment_id"]
+    payer_id = request.data["payer_id"]
+    promocode = request.data["promocode"]
+    cert_number = request.data["cert_number"]
+    print(payment_id, payer_id, user_address)
+    oauth_response = requests.post(
+        "https://api-m.sandbox.paypal.com/v1/oauth2/token",
+        headers={"Accept": "application/json", "Accept-Language": "en_US"},
+        auth=(
+            "Aa5J3mR3jlFHK_hdfAgLf27_6ipx92D_RGS_6o89-1xzU2lks4P5AIrLV_71XQZA_D4PmQJAaJfrkA3I",
+            "EC3f6uulszukVmUA4YbL9vMeci20CsoAncWq0z5LVRDiqoo9xK8TL8EfnazNx2unzUkG0APckf3sjEMN",
+        ),
+        data={"grant_type": "client_credentials"},
+    )
+    access_token = oauth_response.json()["access_token"]
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + access_token,
+    }
+    response = requests.get(
+        "https://api.sandbox.paypal.com/v2/checkout/orders/" + payment_id,
+        headers=headers,
+    )
+    payment_details = response.json()
+    if payment_details["status"] == "COMPLETED":
+        payment_amount = float(payment_details["purchase_units"][0]["amount"]["value"])
+        discount = 0
+        if promocode != "":
+            try:
+                promocode_model = Promocode.objects.get(promo_id=promocode)
+                if promocode_model.is_active:
+                    discount = promocode_model.discount
+                    promocode_model.is_active = False
+                    promocode_model.save()
+            except:
+                discount = 0
+        payment_amount_required = get_payment_amount(
+            cert_number=cert_number, discount=discount
+        )
+        print(
+            "Payment done: ",
+            payment_amount,
+            " Payment required: ",
+            payment_amount_required,
+        )
+        if (payment_amount_required - payment_amount) > -1 and (
+            payment_amount_required - payment_amount
+        ) < 1:
+            user = User.objects.get(account=user_address)
+            user.nft_quota = user.nft_quota + int(cert_number)
+            user.save()
+        return Response({"status": "Success", "response": payment_amount})
+    
+    
+    return Response({"status": "Failed"})
+
+
+@api_view(["POST"])
+def promocode(request):
+    code = request.data["code"]
+    request_type = request.data["request_type"]
+    if request_type == "create":
+        admin = request.data["admin"]
+        if not Admin.objects.filter(account=admin).exists():
+            return Response({"status": "Failed", "response": "Admin not found"})
+        admin_model = Admin.objects.get(account=admin)
+        discount = request.data["discount"]
+        Promocode.objects.create(
+            created_by=admin_model,
+            promo_id=code,
+            discount=int(discount),
+            is_active=True,
+        )
+        return Response(
+            {"status": "Success", "response": "Promocode added successfully"}
+        )
+    if request_type == "view":
+        promocode = Promocode.objects.get(promo_id=code)
+
+    return Response({"status": "Success", "response": model_to_dict(promocode)})
+
+@api_view(["POST"])
+def tryforfree(request):
+    name = request.data["name"]
+    designation = request.data["designation"]
+    email = request.data["email"]
+    institute = request.data["institute"]
+    contact = request.data["contact"]
+    country = request.data["country"]
+    print(name, designation, email)
+    try:
+        sendTryforfreeemail(name, designation, email, institute, contact, country)
+    except Exception as e:
+        print(e)
+    return Response({"status": "Success", "response": "Submitted successfully."})
+
+
+def sendTryforfreeemail(name, designation, email, institute, contact, country):
+    subject = "Free certificate query on BitMemoirLatam"
+    data = (
+        "name: "
+        + name
+        + "\ndesignation: "
+        + designation
+        + "\nemail: "
+        + email
+        + "\ninstitute: "
+        + institute
+        + "\ncontact: "
+        + contact
+        + "\ncountry: "
+        + country
+    )
+    message = "Hi, \n\nCertificate query received with the following data:\n\n" + data
+    sender = "hello@beimagine.tech"
+    recipients = ["radhika@beimagine.tech", "support@beimagine.tech"]
+    email1 = EmailMessage(
+        subject=subject,
+        body=message,
+        from_email=sender,
+        to=recipients,
+    )
+    email1.send(fail_silently=False)
+    subject = "Welcome to BitMemoir"
+    message = (
+        "Hi "
+        + name
+        + ",\n\nThankyou for choosing Bitmemoir. Our representative will contact you shortly.\n\nRegards\nTeam BitMemoir\nhttps:\\bitmemoirlatam.com"
+    )
+    try:
+        email2 = EmailMessage(
+            subject=subject,
+            body=message,
+            from_email=sender,
+            to=[email],
+        )
+        email2.send(fail_silently=False)
+    except Exception as e:
+        print(e)
+
+
+
+
+@api_view(["POST", "GET"])
+def getOrderList(request):
+    user_address = request.data["user_address"]
+    user = User.objects.get(account=Web3.toChecksumAddress(user_address))
+    try:
+        orders = Certificate_Order.objects.filter(user=user)
+        order_list = []
+        for order in orders:
+            order_dict = model_to_dict(order)
+            certificate_list = []
+            for certificate in order.certificates.all():
+                certificate_dict = model_to_dict(certificate)
+                if not certificate.image:
+                    # print("Image not ")
+                    certificate_dict["image"]=""
+                else:
+                    certificate_dict["image"]=certificate.image.url
+                if not certificate.metadata:
+                    certificate_dict["metadata"]=""
+                else:
+                    certificate_dict["metadata"]=certificate.metadata.url
+                certificate_list.append(certificate_dict)
+            order_list.append(certificate_list)
+        return JsonResponse({"status": "Success", "response": order_list})
+    except Exception as e:
+        print(e)
+        return JsonResponse({"status": "Failed", "response": "Something went wrong"})
+    
+
+@api_view(["POST", "GET"])
+def retry_certificate(request):
+    try:
+        # data = json.loads(request.body)
+        # certificate_list = data.get('certificate_list')
+        # certificate_list = request.POST.getlist('certificate_list')
+        certificate_list = json.loads(request.data["certificate_list"])
+        server_url = request.META.get('HTTP_REFERER', '')
+        print(certificate_list)
+        for cert in certificate_list:
+            certificate = Certificate.objects.get(pk=cert["id"])
+            
+            create_certificate_from_template(certificate=certificate, token_id=0, server_url=server_url)
+            metadata_url = certificate.metadata.url
+            token_id = create_certificate(
+                account=certificate.recipient,
+                metadata=metadata_url,
+                contract_address=certificate.user.contract_address,
+            )
+            certificate.isMinted = True  
+            certificate.status="Issued" 
+            certificate.save()
+            print(token_id)
+            print(metadata_url)
+            isMinted=create_certificate_from_template(certificate=certificate, token_id=token_id,server_url=server_url)
+            if isMinted != False:
+                try:
+                    receiverEmail = certificate.email
+                    if receiverEmail:
+                        print('Sending Email....')
+                        send_dnft_email(recipient=str(receiverEmail), sender_name=certificate.user.name, link= server_url+"#/verify/" + certificate.user.contract_address + "/" + str(token_id),file=isMinted)
+                except Exception as e:
+                    print("Email exception")
+                    print(e)
+                    # return Response({"status": "Failed"})
+            time.sleep(5)
+        return Response({
+            "status":"Success"
+        })
+    except Exception as e:
+        print(e)
+        return Response({
+            "status":"Failed",
+            "response":'Something went wrong'
+        })
+        
+
+# @api_view(["POST", "GET"])
+# def allMinted(request):
+#     certificates = Certificate.objects.exclude(Q(image__isnull=True) | Q(metadata__isnull=True) | Q(image='') | Q(metadata=''))
+
+#     for certificate in certificates:
+#         certificate.status = "Issued"
+#         certificate.save()
+        
+#     return Response({
+#         "status":"success"
+#     })
+  # Import the Approver model if not already imported
+
+    
+
+
+        
+
+        

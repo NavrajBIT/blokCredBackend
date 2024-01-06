@@ -8,6 +8,7 @@ from web3.middleware import geth_poa_middleware
 import time
 
 
+
 # Contract data
 contract_address = contract_config.config["contract_address"]
 public_key = contract_config.config["public_key"]
@@ -88,13 +89,20 @@ def get_nft_category(contract_address):
 
 
 def get_contract_details(contract_address, token_id):
+    print("get_contract_details............")
     token_id = int(token_id)
     my_contract = w3.eth.contract(address=contract_address, abi=abi)
+    print("AFter my contract")
     owner = my_contract.functions.ownerOf(token_id).call()
+    print("Owner")
     metadata_uri = my_contract.functions.tokenURI(token_id).call()
+    print("metadata uri")
     # event_filter = my_contract.events.Transfer.build_filter()
     # event_filter.args.clientGroups.match_any(0, 0, token_id)
     # print(event_filter)
+    # web3 = Web3()  # Initialize a Web3 instance
+    # contract_block = web3.eth.getBlock('latest')  # Fetch the latest block
+    # contract_block_timestamp = contract_block.timestamp  # Get the timestamp of the contract block
 
     return owner, metadata_uri
 

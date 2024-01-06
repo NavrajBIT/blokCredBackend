@@ -25,10 +25,13 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "api.apps.ApiConfig",
+    "blog.apps.BlogConfig",
     "corsheaders",
     "rest_framework",
+    "rest_framework.authtoken",
     "storages"
 ]
+
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -110,7 +113,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 EMAIL_HOST = "smtp.gmail.com"
 EMAIL_PORT = 587
 EMAIL_HOST_USER = "hello@beimagine.tech"
-EMAIL_HOST_PASSWORD = "fykbnszqlzfrgssl"
+EMAIL_HOST_PASSWORD = "zdhefblvaluaclfn"
 EMAIL_USE_TLS = True
 EMAIL_USE_SSL = False
 # timeout= EMAIL_TIMEOUT
